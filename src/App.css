@@ -6,22 +6,13 @@
   padding: 0;
 }
 
-body {
-  font-family: 'Vazirmatn', Tahoma, sans-serif;
-  background-color: #0e1621;
-  color: #fff;
-}
-
-/* این بخش کلیدی است: گرفتن کل فضای مرورگر بدون توجه به نوارهای بالا و پایین */
+/* ظرف اصلی که کل صفحه رو پر می‌کنه */
 .app-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #17212b;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* این خط مخصوص مرورگرهای موبایله */
+  background-color: #17212b;
 }
 
 /* هدر */
@@ -61,6 +52,7 @@ body {
   background-color: #0e1621;
   padding: 20px;
   text-align: center;
+  min-height: 0; /* بسیار مهم */
 }
 
 .empty-state h3 {
@@ -106,7 +98,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0; 
+  min-height: 0; /* بسیار مهم برای اسکرول درست */
   overflow: hidden;
 }
 
@@ -137,7 +129,7 @@ body {
 /* پیام ها */
 .messages-area {
   flex: 1;
-  min-height: 0;
+  min-height: 0; /* بسیار مهم */
   padding: 20px;
   overflow-y: auto;
   background-color: #0e1621;
@@ -176,9 +168,9 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0; 
-  /* این خط برای گوشی‌های ناچ‌دار (مثل آیفون) و اندرویدهای جدید حیاتی است */
-  padding-bottom: calc(10px + env(safe-area-inset-bottom)); 
+  flex-shrink: 0; /* جلوگیری از فشرده شدن */
+  /* این خط باعث میشه روی گوشی‌های دارای ناچ (مثل آیفون و اندرویدهای جدید) هم درست بشه */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); 
 }
 
 .input-area input {
