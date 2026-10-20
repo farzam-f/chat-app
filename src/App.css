@@ -6,16 +6,19 @@
   padding: 0;
 }
 
-body {
+/* تنظیم ارتفاع برای موبایل و دسکتاپ */
+html, body {
   font-family: 'Vazirmatn', Tahoma, sans-serif;
-  background-color: #0e1621; /* رنگ پس‌زمینه تلگرام */
+  background-color: #0e1621;
   color: #fff;
   height: 100vh;
+  height: 100dvh; /* این خط مخصوص گوشی‌هاست */
   overflow: hidden;
 }
 
 #root {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   justify-content: center;
 }
@@ -27,10 +30,11 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
-/* هدر بالای صفحه */
+/* هدر */
 .header {
   background-color: #17212b;
   padding: 15px 20px;
@@ -39,6 +43,7 @@ body {
   align-items: center;
   border-bottom: 1px solid #101921;
   z-index: 10;
+  flex-shrink: 0; /* جلوگیری از کوچک شدن هدر */
 }
 
 .header h2 {
@@ -60,11 +65,7 @@ body {
   cursor: pointer;
 }
 
-.user-code-badge:hover {
-  background-color: #3a6a96;
-}
-
-/* صفحه اصلی (وقتی چتی باز نیست) */
+/* صفحه اصلی */
 .empty-state {
   flex: 1;
   display: flex;
@@ -111,11 +112,6 @@ body {
   cursor: pointer;
   font-family: inherit;
   font-weight: bold;
-  transition: 0.2s;
-}
-
-.search-box button:hover {
-  background-color: #3a6a96;
 }
 
 /* بخش چت */
@@ -123,6 +119,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0; /* بسیار مهم: جلوگیری از سرریز شدن چت */
   overflow: hidden;
 }
 
@@ -131,7 +128,14 @@ body {
   padding: 15px 20px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   border-bottom: 1px solid #101921;
+  flex-shrink: 0;
+}
+
+.chat-header h3 {
+  font-size: 1rem;
+  color: #fff;
 }
 
 .back-btn {
@@ -140,22 +144,17 @@ body {
   color: #5eb5f7;
   cursor: pointer;
   font-size: 1rem;
-  margin-left: 15px;
   font-family: inherit;
-}
-
-.chat-header h3 {
-  font-size: 1rem;
-  color: #fff;
 }
 
 /* پیام ها */
 .messages-area {
   flex: 1;
+  min-height: 0; /* بسیار مهم */
   padding: 20px;
   overflow-y: auto;
   background-color: #0e1621;
-  background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png'); /* بک‌گراند تلگرام */
+  background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png');
   background-size: cover;
   display: flex;
   flex-direction: column;
@@ -191,6 +190,8 @@ body {
   display: flex;
   align-items: center;
   gap: 15px;
+  flex-shrink: 0; /* جلوگیری از فشرده شدن باکس ارسال */
+  padding-bottom: calc(15px + env(safe-area-inset-bottom)); /* سازگاری با گوشی‌های ناچ‌دار */
 }
 
 .input-area input {
@@ -203,6 +204,7 @@ body {
   font-family: inherit;
   font-size: 1rem;
   outline: none;
+  min-width: 0; /* جلوگیری از باز شدن بیش از حد اینپوت در موبایل */
 }
 
 .send-btn {
@@ -216,11 +218,7 @@ body {
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  transition: 0.2s;
-}
-
-.send-btn:hover {
-  background-color: #3a6a96;
+  flex-shrink: 0;
 }
 
 .send-btn svg {
