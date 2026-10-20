@@ -1,14 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db, signInAnonymously } from './firebase';
-import { 
-  doc, getDoc, setDoc, collection, query, orderBy, 
-  addDoc, onSnapshot, serverTimestamp 
-} from 'firebase/firestore';
+import { supabase } from './supabaseClient';
 import './App.css';
 
 function App() {
-  const [user, loading] = useAuthState(auth);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [userCode, setUserCode] = useState('');
   const [targetCode, setTargetCode] = useState('');
   const [chatUser, setChatUser] = useState(null);
@@ -16,14 +12,20 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
   const [chatId, setChatId] = useState(null);
 
-  // ۱. لاگین خودکار ناشناس (بدون هیچ پاپ‌آپی)
+  // ۱. لاگین ناشناس و مدیریت وضعیت کاربر
   useEffect(() => {
-    if (!user && !loading) {
-      signInAnonymously(auth).catch((error) => {
-        console.error("خطا در اتصال به سرور:", error);
-      });
-    }
-  }, [user, loading]);
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (!error) setUser(data.user);
+      } else {
+        setUser(session.user);
+      }
+      setLoading(false);
+    };
+    checkUser();
+  }, []);
 
   // تولید کد اختصاصی ۶ رقمی
   const generateUniqueCode = async () => {
@@ -32,34 +34,40 @@ function App() {
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    const codeRef = doc(db, 'userCodes', code);
-    const docSnap = await getDoc(codeRef);
-    return docSnap.exists() ? generateUniqueCode() : code;
+    const { data } = await supabase.from('profiles').select('code').eq('code', code).maybeSingle();
+    return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد کاربر (بررسی اینکه قبلاً کد داشته یا نه)
+  // ۲. تنظیم کد برای کاربر
   useEffect(() => {
     const setupUserCode = async () => {
       if (user) {
-        // اول ببینیم توی حافظه مرورگر کدی ذخیره شده یا نه
         let localCode = localStorage.getItem('myChatCode');
         
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (!userSnap.exists()) {
-          // اگر کاربر جدید بود
+        // استفاده از maybeSingle برای جلوگیری از خطای 406 در کنسول
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('code')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('خطا در ارتباط با دیتابیس:', error);
+          return;
+        }
+
+        if (!data) {
+          // کاربر جدید است
           if (!localCode) {
             localCode = await generateUniqueCode();
-            localStorage.setItem('myChatCode', localCode); // ذخیره در مرورگر
+            localStorage.setItem('myChatCode', localCode);
           }
-          await setDoc(userRef, { code: localCode });
-          await setDoc(doc(db, 'userCodes', localCode), { uid: user.uid });
+          await supabase.from('profiles').insert({ id: user.id, code: localCode });
           setUserCode(localCode);
         } else {
-          // اگر کاربر قبلاً ثبت‌نام کرده بود
-          setUserCode(userSnap.data().code);
-          localStorage.setItem('myChatCode', userSnap.data().code);
+          // کاربر از قبل وجود دارد
+          setUserCode(data.code);
+          localStorage.setItem('myChatCode', data.code);
         }
       }
     };
@@ -71,47 +79,71 @@ function App() {
     const code = targetCode.trim().toUpperCase();
     if (code === userCode) return alert('این کد خودتان است!');
     
-    const codeRef = doc(db, 'userCodes', code);
-    const codeSnap = await getDoc(codeRef);
+    // استفاده از maybeSingle در جستجو
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, code')
+      .eq('code', code)
+      .maybeSingle();
     
-    if (codeSnap.exists()) {
-      const otherUid = codeSnap.data().uid;
-      const newChatId = [user.uid, otherUid].sort().join('_');
-      setChatUser({ uid: otherUid, code: code });
+    if (data) {
+      const newChatId = [user.id, data.id].sort().join('_');
+      setChatUser({ uid: data.id, code: data.code });
       setChatId(newChatId);
     } else {
       alert('کاربری با این کد پیدا نشد.');
     }
   };
 
-  // دریافت پیام‌ها
+  // ۳. دریافت پیام‌ها به صورت لحظه‌ای (Real-time)
   useEffect(() => {
     if (!chatId) return;
-    const q = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => unsubscribe();
+
+    // گرفتن پیام‌های قبلی
+    const fetchMessages = async () => {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: true });
+      if (data) setMessages(data);
+    };
+    fetchMessages();
+
+    // گوش دادن به پیام‌های جدید
+    const channel = supabase
+      .channel('chat-room')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
+        (payload) => {
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [chatId]);
 
   // ارسال پیام
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
-    await addDoc(collection(db, 'chats', chatId, 'messages'), {
-      text: newMessage,
-      senderId: user.uid,
-      createdAt: serverTimestamp(),
-    });
+    
+    const msgText = newMessage;
     setNewMessage('');
+
+    await supabase.from('messages').insert({
+      chat_id: chatId,
+      sender_id: user.id,
+      content: msgText,
+    });
   };
 
   if (loading) return <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'Tahoma' }}>در حال اتصال به سرور...</div>;
-
-  // اگر هنوز کاربر ساخته نشده، فقط لودینگ نشان بده
-  if (!user) {
-    return <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'Tahoma' }}>در حال ساخت حساب کاربری...</div>;
-  }
+  if (!user) return <div style={{ textAlign: 'center', marginTop: '50px', fontFamily: 'Tahoma' }}>در حال ساخت حساب کاربری...</div>;
 
   // صفحه اصلی (داشبورد)
   return (
@@ -125,7 +157,6 @@ function App() {
         <p style={{ fontSize: '12px', color: '#666' }}>این کد مخصوص همین مرورگر است. آن را به دوستانتان بدهید تا با شما چت کنند.</p>
       </div>
       
-      {/* بخش جستجو */}
       {!chatUser && (
         <div style={{ background: '#e8f4f8', padding: '15px', borderRadius: '8px' }}>
           <h3>شروع چت جدید</h3>
@@ -139,15 +170,14 @@ function App() {
         </div>
       )}
 
-      {/* بخش چت */}
       {chatUser && (
         <div style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}>
           <h3>چت با {chatUser.code}</h3>
           <div style={{ border: '1px solid #ddd', height: '300px', overflowY: 'scroll', padding: '10px', marginBottom: '10px', background: '#fafafa' }}>
             {messages.map(msg => (
-              <div key={msg.id} style={{ textAlign: msg.senderId === user.uid ? 'left' : 'right', margin: '5px 0' }}>
-                <span style={{ background: msg.senderId === user.uid ? '#dcf8c6' : '#fff', padding: '8px 12px', borderRadius: '15px', display: 'inline-block', border: '1px solid #ddd' }}>
-                  {msg.text}
+              <div key={msg.id} style={{ textAlign: msg.sender_id === user.id ? 'left' : 'right', margin: '5px 0' }}>
+                <span style={{ background: msg.sender_id === user.id ? '#dcf8c6' : '#fff', padding: '8px 12px', borderRadius: '15px', display: 'inline-block', border: '1px solid #ddd' }}>
+                  {msg.content}
                 </span>
               </div>
             ))}
