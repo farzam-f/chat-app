@@ -6,32 +6,22 @@
   padding: 0;
 }
 
-/* تنظیم ارتفاع برای موبایل و دسکتاپ */
-html, body {
+body {
   font-family: 'Vazirmatn', Tahoma, sans-serif;
   background-color: #0e1621;
   color: #fff;
-  height: 100vh;
-  height: 100dvh; /* این خط مخصوص گوشی‌هاست */
-  overflow: hidden;
 }
 
-#root {
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  justify-content: center;
-}
-
+/* این بخش کلیدی است: گرفتن کل فضای مرورگر بدون توجه به نوارهای بالا و پایین */
 .app-container {
-  width: 100%;
-  max-width: 800px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: #17212b;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
 /* هدر */
@@ -42,16 +32,12 @@ html, body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #101921;
-  z-index: 10;
-  flex-shrink: 0; /* جلوگیری از کوچک شدن هدر */
+  flex-shrink: 0; 
 }
 
 .header h2 {
   font-size: 1.2rem;
   color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .user-code-badge {
@@ -81,6 +67,7 @@ html, body {
   margin-bottom: 20px;
   color: #7f91a4;
   font-weight: normal;
+  font-size: 1rem;
 }
 
 .search-box {
@@ -119,7 +106,7 @@ html, body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0; /* بسیار مهم: جلوگیری از سرریز شدن چت */
+  min-height: 0; 
   overflow: hidden;
 }
 
@@ -150,7 +137,7 @@ html, body {
 /* پیام ها */
 .messages-area {
   flex: 1;
-  min-height: 0; /* بسیار مهم */
+  min-height: 0;
   padding: 20px;
   overflow-y: auto;
   background-color: #0e1621;
@@ -167,7 +154,6 @@ html, body {
   border-radius: 15px;
   font-size: 0.95rem;
   line-height: 1.5;
-  position: relative;
   word-wrap: break-word;
 }
 
@@ -186,33 +172,34 @@ html, body {
 /* باکس ارسال پیام */
 .input-area {
   background-color: #17212b;
-  padding: 15px 20px;
+  padding: 10px 15px;
   display: flex;
   align-items: center;
-  gap: 15px;
-  flex-shrink: 0; /* جلوگیری از فشرده شدن باکس ارسال */
-  padding-bottom: calc(15px + env(safe-area-inset-bottom)); /* سازگاری با گوشی‌های ناچ‌دار */
+  gap: 10px;
+  flex-shrink: 0; 
+  /* این خط برای گوشی‌های ناچ‌دار (مثل آیفون) و اندرویدهای جدید حیاتی است */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom)); 
 }
 
 .input-area input {
   flex: 1;
   background-color: #242f3d;
   border: none;
-  padding: 15px 20px;
+  padding: 12px 20px;
   border-radius: 25px;
   color: #fff;
   font-family: inherit;
   font-size: 1rem;
   outline: none;
-  min-width: 0; /* جلوگیری از باز شدن بیش از حد اینپوت در موبایل */
+  min-width: 0; 
 }
 
 .send-btn {
   background-color: #2b5278;
   color: white;
   border: none;
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   justify-content: center;
@@ -222,7 +209,7 @@ html, body {
 }
 
 .send-btn svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   fill: currentColor;
 }
