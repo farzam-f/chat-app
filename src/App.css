@@ -1,21 +1,35 @@
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
 
+/* ۱. تنظیمات پایه و ریست */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* ظرف اصلی که کل صفحه رو پر می‌کنه */
+html, body, #root {
+  font-family: 'Vazirmatn', Tahoma, sans-serif;
+  background-color: #0e1621;
+  color: #fff;
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* قفل کردن اسکرول کل صفحه */
+}
+
+/* ۲. ظرف اصلی برنامه */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  height: 100dvh; /* این خط مخصوص مرورگرهای موبایله */
+  height: 100dvh; /* اصلاح ارتفاع برای موبایل */
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
   background-color: #17212b;
+  box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
-/* هدر */
+/* ۳. هدر بالا */
 .header {
   background-color: #17212b;
   padding: 15px 20px;
@@ -24,25 +38,78 @@
   align-items: center;
   border-bottom: 1px solid #101921;
   flex-shrink: 0; 
+  z-index: 10;
+}
+
+.profile-section {
+  display: flex;
+  align-items: center;
 }
 
 .header h2 {
   font-size: 1.2rem;
   color: #fff;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
+.header h2:hover {
+  color: #5eb5f7;
+}
+
+/* باکس ویرایش اسم */
+.edit-name-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-name-box input {
+  background: #242f3d;
+  border: 1px solid #2b5278;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  outline: none;
+  width: 130px;
+  font-size: 0.9rem;
+}
+
+.edit-name-box button {
+  background: #2b5278;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: 0.2s;
+}
+
+.edit-name-box button:hover {
+  background: #3a6a96;
+}
+
+/* بج کد اختصاصی */
 .user-code-badge {
   background-color: #2b5278;
   color: #fff;
-  padding: 4px 12px;
+  padding: 6px 14px;
   border-radius: 20px;
   font-size: 0.9rem;
   font-weight: bold;
   letter-spacing: 1px;
   cursor: pointer;
+  transition: 0.2s;
 }
 
-/* صفحه اصلی */
+.user-code-badge:hover {
+  background-color: #3a6a96;
+}
+
+/* ۴. صفحه اصلی (وقتی چتی باز نیست) */
 .empty-state {
   flex: 1;
   display: flex;
@@ -52,11 +119,11 @@
   background-color: #0e1621;
   padding: 20px;
   text-align: center;
-  min-height: 0; /* بسیار مهم */
+  min-height: 0;
 }
 
 .empty-state h3 {
-  margin-bottom: 20px;
+  margin-bottom: 25px;
   color: #7f91a4;
   font-weight: normal;
   font-size: 1rem;
@@ -65,10 +132,11 @@
 .search-box {
   display: flex;
   background-color: #242f3d;
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 12px;
+  padding: 8px;
   width: 100%;
   max-width: 400px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
 }
 
 .search-box input {
@@ -80,25 +148,31 @@
   outline: none;
   font-size: 1rem;
   text-align: center;
+  min-width: 0;
 }
 
 .search-box button {
   background-color: #2b5278;
   color: white;
   border: none;
-  padding: 8px 20px;
+  padding: 10px 20px;
   border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
   font-weight: bold;
+  transition: 0.2s;
 }
 
-/* بخش چت */
+.search-box button:hover {
+  background-color: #3a6a96;
+}
+
+/* ۵. بخش چت */
 .chat-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0; /* بسیار مهم برای اسکرول درست */
+  min-height: 0; /* بسیار مهم برای اسکرول */
   overflow: hidden;
 }
 
@@ -124,12 +198,17 @@
   cursor: pointer;
   font-size: 1rem;
   font-family: inherit;
+  transition: 0.2s;
 }
 
-/* پیام ها */
+.back-btn:hover {
+  color: #fff;
+}
+
+/* ۶. ناحیه پیام‌ها */
 .messages-area {
   flex: 1;
-  min-height: 0; /* بسیار مهم */
+  min-height: 0;
   padding: 20px;
   overflow-y: auto;
   background-color: #0e1621;
@@ -137,47 +216,100 @@
   background-size: cover;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
+/* ظرف هر پیام (برای جا دادن ساعت و دکمه حذف) */
+.message-wrapper {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+}
+
+.message-wrapper.outgoing {
+  align-self: flex-end;
+}
+
+.message-wrapper.incoming {
+  align-self: flex-start;
+}
+
+/* حباب پیام */
 .message-bubble {
-  max-width: 75%;
   padding: 10px 15px;
   border-radius: 15px;
   font-size: 0.95rem;
   line-height: 1.5;
   word-wrap: break-word;
+  max-width: 100%;
 }
 
-.message-bubble.incoming {
-  background-color: #182533;
-  align-self: flex-start;
+.message-wrapper.outgoing .message-bubble {
+  background-color: #2b5278;
   border-bottom-right-radius: 4px;
 }
 
-.message-bubble.outgoing {
-  background-color: #2b5278;
-  align-self: flex-end;
+.message-wrapper.incoming .message-bubble {
+  background-color: #182533;
   border-bottom-left-radius: 4px;
 }
 
-/* باکس ارسال پیام */
+/* بخش اطلاعات زیر پیام (ساعت و سطل زباله) */
+.message-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  margin-right: 5px;
+  margin-left: 5px;
+  width: 100%;
+}
+
+/* چیدمان برای پیام‌های خودمان (ساعت سمت راست، سطل سمت چپ) */
+.message-wrapper.outgoing .message-info {
+  flex-direction: row; 
+}
+
+/* چیدمان برای پیام‌های طرف مقابل */
+.message-wrapper.incoming .message-info {
+  flex-direction: row-reverse;
+}
+
+.message-time {
+  font-size: 0.7rem;
+  color: #7f91a4;
+}
+
+/* دکمه حذف (سطل زباله) */
+.delete-btn {
+  font-size: 0.8rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: 0.2s;
+  margin: 0 8px;
+}
+
+.delete-btn:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+/* ۷. باکس ارسال پیام */
 .input-area {
   background-color: #17212b;
   padding: 10px 15px;
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0; /* جلوگیری از فشرده شدن */
-  /* این خط باعث میشه روی گوشی‌های دارای ناچ (مثل آیفون و اندرویدهای جدید) هم درست بشه */
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); 
+  flex-shrink: 0; 
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); /* اصلاح برای پایین گوشی */
 }
 
 .input-area input {
   flex: 1;
   background-color: #242f3d;
   border: none;
-  padding: 12px 20px;
+  padding: 14px 20px;
   border-radius: 25px;
   color: #fff;
   font-family: inherit;
@@ -190,18 +322,35 @@
   background-color: #2b5278;
   color: white;
   border: none;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: 0.2s;
+}
+
+.send-btn:hover {
+  background-color: #3a6a96;
 }
 
 .send-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   fill: currentColor;
+  margin-right: 2px;
+}
+
+/* ۸. صفحه لودینگ */
+.loading-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100dvh;
+  background-color: #0e1621;
+  color: #fff;
+  font-family: 'Vazirmatn', Tahoma, sans-serif;
 }
