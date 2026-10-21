@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import './App.css';
 
@@ -13,6 +13,9 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [chatId, setChatId] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  
+  const fileInputRef = useRef(null);
 
   // ۱. لاگین ناشناس
   useEffect(() => {
@@ -40,7 +43,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد و اسم برای کاربر
+  // ۲. تنظیم کد و اسم
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -107,7 +110,6 @@ function App() {
     };
     fetchMessages();
 
-    // گوش دادن به پیام‌های جدید و حذف شده
     const channel = supabase
       .channel('chat-room')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
@@ -121,7 +123,7 @@ function App() {
     return () => supabase.removeChannel(channel);
   }, [chatId]);
 
-  // ارسال پیام
+  // ارسال پیام متنی
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
@@ -135,13 +137,52 @@ function App() {
     });
   };
 
+  // ۴. آپلود عکس
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !chatId) return;
+
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+    const filePath = `${chatId}/${fileName}`;
+
+    // آپلود به Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('chat-images')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      alert('خطا در آپلود عکس!');
+      console.error(uploadError);
+      setUploading(false);
+      return;
+    }
+
+    // گرفتن لینک عکس
+    const { data: { publicUrl } } = supabase.storage
+      .from('chat-images')
+      .getPublicUrl(filePath);
+
+    // ذخیره لینک عکس توی دیتابیس
+    await supabase.from('messages').insert({
+      chat_id: chatId,
+      sender_id: user.id,
+      content: '',
+      image_url: publicUrl,
+    });
+
+    setUploading(false);
+    // ریست کردن اینپوت فایل
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   // حذف پیام
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
       if (error) {
         alert('خطا در حذف پیام!');
-        console.error(error);
       } else {
         setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
       }
@@ -153,7 +194,6 @@ function App() {
     alert('کد اختصاصی کپی شد!');
   };
 
-  // فرمت کردن ساعت
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -217,11 +257,16 @@ function App() {
               const isMe = msg.sender_id === user.id;
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
-                  <div className={`message-bubble`}>
-                    {msg.content}
-                  </div>
                   
-                  {/* بخش ساعت و دکمه حذف */}
+                  {/* نمایش عکس یا متن */}
+                  <div className="message-bubble">
+                    {msg.image_url ? (
+                      <img src={msg.image_url} alt="sent" className="chat-image" />
+                    ) : (
+                      msg.content
+                    )}
+                  </div>
+
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     {isMe && (
@@ -236,11 +281,31 @@ function App() {
           </div>
 
           <form className="input-area" onSubmit={sendMessage}>
+            {/* دکمه مخفی برای انتخاب فایل */}
+            <input 
+              type="file" 
+              accept="image/*" 
+              ref={fileInputRef} 
+              onChange={handleImageUpload} 
+              style={{ display: 'none' }} 
+            />
+            
+            {/* دکمه سنجاق برای باز کردن پنجره انتخاب عکس */}
+            <button 
+              type="button" 
+              className="attach-btn" 
+              onClick={() => fileInputRef.current.click()}
+              disabled={uploading}
+            >
+              {uploading ? '⏳' : '📎'}
+            </button>
+
             <input 
               placeholder="پیام..." 
               value={newMessage} 
               onChange={(e) => setNewMessage(e.target.value)} 
             />
+            
             <button type="submit" className="send-btn">
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>

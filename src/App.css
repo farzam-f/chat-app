@@ -1,6 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
 
-/* ۱. تنظیمات پایه */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -16,7 +15,6 @@ html, body, #root {
   overflow: hidden; 
 }
 
-/* ۲. ظرف اصلی */
 .app-container {
   display: flex;
   flex-direction: column;
@@ -29,7 +27,6 @@ html, body, #root {
   box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
-/* ۳. هدر */
 .header {
   background-color: #17212b;
   padding: 15px 20px;
@@ -87,10 +84,6 @@ html, body, #root {
   transition: 0.2s;
 }
 
-.edit-name-box button:hover {
-  background: #3a6a96;
-}
-
 .user-code-badge {
   background-color: #2b5278;
   color: #fff;
@@ -103,11 +96,6 @@ html, body, #root {
   transition: 0.2s;
 }
 
-.user-code-badge:hover {
-  background-color: #3a6a96;
-}
-
-/* ۴. صفحه اصلی */
 .empty-state {
   flex: 1;
   display: flex;
@@ -158,14 +146,8 @@ html, body, #root {
   cursor: pointer;
   font-family: inherit;
   font-weight: bold;
-  transition: 0.2s;
 }
 
-.search-box button:hover {
-  background-color: #3a6a96;
-}
-
-/* ۵. بخش چت */
 .chat-container {
   display: flex;
   flex-direction: column;
@@ -196,14 +178,8 @@ html, body, #root {
   cursor: pointer;
   font-size: 1rem;
   font-family: inherit;
-  transition: 0.2s;
 }
 
-.back-btn:hover {
-  color: #fff;
-}
-
-/* ۶. ناحیه پیام‌ها */
 .messages-area {
   flex: 1;
   min-height: 0;
@@ -238,6 +214,7 @@ html, body, #root {
   line-height: 1.5;
   word-wrap: break-word;
   max-width: 100%;
+  overflow: hidden; /* برای اینکه عکس از حباب بیرون نزنه */
 }
 
 .message-wrapper.outgoing .message-bubble {
@@ -250,7 +227,16 @@ html, body, #root {
   border-bottom-left-radius: 4px;
 }
 
-/* ۷. بخش ساعت و سطل زباله */
+/* استایل عکس داخل چت */
+.chat-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 5px;
+  cursor: pointer;
+}
+
 .message-info {
   display: flex;
   align-items: center;
@@ -287,7 +273,6 @@ html, body, #root {
   transform: scale(1.2);
 }
 
-/* ۸. باکس ارسال پیام */
 .input-area {
   background-color: #17212b;
   padding: 10px 15px;
@@ -298,7 +283,7 @@ html, body, #root {
   padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); 
 }
 
-.input-area input {
+.input-area input[type="text"] {
   flex: 1;
   background-color: #242f3d;
   border: none;
@@ -309,6 +294,21 @@ html, body, #root {
   font-size: 1rem;
   outline: none;
   min-width: 0; 
+}
+
+/* دکمه ارسال فایل (سنجاق) */
+.attach-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #7f91a4;
+  transition: 0.2s;
+  padding: 0 5px;
+}
+
+.attach-btn:hover {
+  color: #5eb5f7;
 }
 
 .send-btn {
@@ -324,10 +324,6 @@ html, body, #root {
   cursor: pointer;
   flex-shrink: 0;
   transition: 0.2s;
-}
-
-.send-btn:hover {
-  background-color: #3a6a96;
 }
 
 .send-btn svg {
