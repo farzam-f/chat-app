@@ -15,6 +15,7 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [hasBlockedMe, setHasBlockedMe] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false); // استیت جدید برای منوی حذف
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [chatList, setChatList] = useState([]);
@@ -110,28 +111,26 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. دریافت لیست چت‌ها + شمارش پیام‌های خونده نشده
+  // ۴. دریافت لیست چت‌ها (با فیلتر کردن پیام‌های حذف شده برای من)
   const fetchChatList = async () => {
     if (!user) return;
     
-    // گرفتن همه پیام‌ها (برای پیدا کردن آخرین پیام و تعداد خونده نشده‌ها)
     const { data: msgs, error } = await supabase
       .from('messages')
-      .select('chat_id, content, image_url, created_at, sender_id, is_read')
+      .select('chat_id, content, image_url, created_at, sender_id, is_read, deleted_for')
       .like('chat_id', `%${user.id}%`)
       .order('created_at', { ascending: false });
 
     if (error || !msgs) return;
 
+    // فیلتر کردن پیام‌هایی که من برای خودم حذف کرده‌ام
+    const visibleMsgs = msgs.filter(msg => !(msg.deleted_for || []).includes(user.id));
+
     const uniqueChats = {};
     const unreadCounts = {};
 
-    msgs.forEach(msg => {
-      // پیدا کردن آخرین پیام
-      if (!uniqueChats[msg.chat_id]) {
-        uniqueChats[msg.chat_id] = msg;
-      }
-      // شمارش پیام‌های خونده نشده (پیام‌هایی که فرستنده من نیستم و خونده نشدن)
+    visibleMsgs.forEach(msg => {
+      if (!uniqueChats[msg.chat_id]) uniqueChats[msg.chat_id] = msg;
       if (msg.sender_id !== user.id && !msg.is_read) {
         unreadCounts[msg.chat_id] = (unreadCounts[msg.chat_id] || 0) + 1;
       }
@@ -160,16 +159,15 @@ function App() {
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
 
-  // شنونده زنده برای پیام‌های جدید وقتی در صفحه اصلی هستیم
+  // شنونده زنده برای لیست چت‌ها
   useEffect(() => {
     if (!user) return;
     const globalChannel = supabase.channel('global-chats')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        const newMsg = payload.new;
-        // اگر پیام از طرف مقابل بود و ما داخل اون چت نبودیم، لیست رو آپدیت کن
-        if (newMsg.sender_id !== user.id && newMsg.chat_id !== chatId) {
-          fetchChatList();
-        }
+        if (payload.new.sender_id !== user.id && payload.new.chat_id !== chatId) fetchChatList();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+        if (payload.new.chat_id !== chatId) fetchChatList();
       })
       .subscribe();
     return () => { supabase.removeChannel(globalChannel); };
@@ -208,21 +206,18 @@ function App() {
     else alert('کاربری با این کد پیدا نشد.');
   };
 
-  // باز کردن چت + خواندن پیام‌ها
   const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
     setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
 
-    // علامت زدن پیام‌های طرف مقابل به عنوان خوانده شده
     await supabase.from('messages')
       .update({ is_read: true })
       .eq('chat_id', newChatId)
       .neq('sender_id', user.id)
       .eq('is_read', false);
 
-    // آپدیت لیست چت‌ها برای صفر شدن بج
     setChatList(prev => prev.map(c => c.chatId === newChatId ? { ...c, unreadCount: 0 } : c));
     await checkBlockStatus(otherUid);
   };
@@ -254,14 +249,15 @@ function App() {
     setIsBlockedByMe(!isBlockedByMe);
   };
 
-  // ۵. دریافت پیام‌ها
+  // ۵. دریافت پیام‌ها (با فیلتر کردن پیام‌های حذف شده برای من)
   useEffect(() => {
     if (!chatId) return;
 
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
       if (data) {
-        const parsedData = data.map(m => ({ ...m, reactions: m.reactions || {} }));
+        const visibleMsgs = data.filter(m => !(m.deleted_for || []).includes(user.id));
+        const parsedData = visibleMsgs.map(m => ({ ...m, reactions: m.reactions || {} }));
         setMessages(parsedData);
       }
     };
@@ -273,10 +269,15 @@ function App() {
         setMessages((prev) => [...prev, { ...payload.new, reactions: payload.new.reactions || {} }]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+        // برای حذف کامل (برای هر دو نفر)
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
-        setMessages((prev) => prev.map(msg => msg.id === payload.new.id ? { ...payload.new, reactions: payload.new.reactions || {} } : msg));
+        setMessages((prev) => {
+          const updated = prev.map(msg => msg.id === payload.new.id ? { ...payload.new, reactions: payload.new.reactions || {} } : msg);
+          // اگر پیام برای من حذف شد، از لیست حذفش کن
+          return updated.filter(m => !(m.deleted_for || []).includes(user.id));
+        });
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         if (payload.user_id !== user?.id) { 
@@ -367,6 +368,24 @@ function App() {
     }
   };
 
+  // تابع حذف کل چت
+  const handleClearChat = async (mode) => {
+    if (mode === 'me') {
+      // حذف فقط برای من با استفاده از تابع دیتابیس
+      const { error } = await supabase.rpc('delete_chat_for_user', { chat_id_param: chatId, user_id_param: user.id });
+      if (error) console.error(error);
+      setMessages([]); // پاک کردن صفحه
+      setChatUser(null); setChatId(null);
+    } else if (mode === 'both') {
+      // حذف برای هر دو نفر (حذف فیزیکی از دیتابیس)
+      const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
+      if (error) console.error(error);
+      setMessages([]);
+      setChatUser(null); setChatId(null);
+    }
+    setShowClearModal(false);
+  };
+
   const addEmoji = (emoji) => { setNewMessage(prev => prev + emoji); };
   const copyCode = () => { navigator.clipboard.writeText(userCode); alert('کد اختصاصی کپی شد!'); };
   const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
@@ -444,7 +463,6 @@ function App() {
                       </div>
                       <div className="chat-last-msg-row">
                         <div className="chat-last-msg">{chat.lastMessage}</div>
-                        {/* نشانگر پیام خونده نشده */}
                         {chat.unreadCount > 0 && (
                           <div className="unread-badge">{chat.unreadCount}</div>
                         )}
@@ -475,11 +493,30 @@ function App() {
               <button className="block-btn" onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
                 {isBlockedByMe ? '✅' : '🚫'}
               </button>
+              {/* دکمه باز کردن منوی حذف */}
+              <button className="block-btn" onClick={() => setShowClearModal(true)} title="حذف چت">
+                🗑️
+              </button>
               <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); setReplyingTo(null); setEditingMessage(null); }}>
                 بستن ✕
               </button>
             </div>
           </div>
+
+          {/* مودال حذف چت */}
+          {showClearModal && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <h3>حذف تاریخچه چت</h3>
+                <p>شما می‌توانید این چت را فقط از روی دستگاه خودتان پاک کنید، یا برای هر دو نفر حذف کنید.</p>
+                <div className="modal-actions">
+                  <button className="btn-me" onClick={() => handleClearChat('me')}>حذف فقط برای من</button>
+                  <button className="btn-both" onClick={() => handleClearChat('both')}>حذف برای هر دو</button>
+                  <button className="btn-cancel" onClick={() => setShowClearModal(false)}>انصراف</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isBlockedByMe && (
             <div className="system-message blocked-msg">شما این کاربر را مسدود کرده‌اید. برای ارسال پیام، ابتدا رفع مسدودیت کنید.</div>
