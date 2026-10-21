@@ -40,7 +40,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد و اسم
+  // ۲. تنظیم کد و اسم برای کاربر
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -143,7 +143,6 @@ function App() {
         alert('خطا در حذف پیام!');
         console.error(error);
       } else {
-        // صفحه خودمان را سریع آپدیت می‌کنیم
         setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
       }
     }
@@ -154,6 +153,7 @@ function App() {
     alert('کد اختصاصی کپی شد!');
   };
 
+  // فرمت کردن ساعت
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -220,6 +220,8 @@ function App() {
                   <div className={`message-bubble`}>
                     {msg.content}
                   </div>
+                  
+                  {/* بخش ساعت و دکمه حذف */}
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     {isMe && (

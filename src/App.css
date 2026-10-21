@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
 
-/* ۱. تنظیمات پایه و ریست */
+/* ۱. تنظیمات پایه */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -13,15 +13,15 @@ html, body, #root {
   color: #fff;
   height: 100%;
   width: 100%;
-  overflow: hidden; /* قفل کردن اسکرول کل صفحه */
+  overflow: hidden; 
 }
 
-/* ۲. ظرف اصلی برنامه */
+/* ۲. ظرف اصلی */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  height: 100dvh; /* اصلاح ارتفاع برای موبایل */
+  height: 100dvh; 
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
@@ -29,7 +29,7 @@ html, body, #root {
   box-shadow: 0 0 20px rgba(0,0,0,0.5);
 }
 
-/* ۳. هدر بالا */
+/* ۳. هدر */
 .header {
   background-color: #17212b;
   padding: 15px 20px;
@@ -57,7 +57,6 @@ html, body, #root {
   color: #5eb5f7;
 }
 
-/* باکس ویرایش اسم */
 .edit-name-box {
   display: flex;
   gap: 8px;
@@ -92,7 +91,6 @@ html, body, #root {
   background: #3a6a96;
 }
 
-/* بج کد اختصاصی */
 .user-code-badge {
   background-color: #2b5278;
   color: #fff;
@@ -109,7 +107,7 @@ html, body, #root {
   background-color: #3a6a96;
 }
 
-/* ۴. صفحه اصلی (وقتی چتی باز نیست) */
+/* ۴. صفحه اصلی */
 .empty-state {
   flex: 1;
   display: flex;
@@ -172,7 +170,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0; /* بسیار مهم برای اسکرول */
+  min-height: 0; 
   overflow: hidden;
 }
 
@@ -219,7 +217,6 @@ html, body, #root {
   gap: 12px;
 }
 
-/* ظرف هر پیام (برای جا دادن ساعت و دکمه حذف) */
 .message-wrapper {
   display: flex;
   flex-direction: column;
@@ -234,7 +231,6 @@ html, body, #root {
   align-self: flex-start;
 }
 
-/* حباب پیام */
 .message-bubble {
   padding: 10px 15px;
   border-radius: 15px;
@@ -254,7 +250,7 @@ html, body, #root {
   border-bottom-left-radius: 4px;
 }
 
-/* بخش اطلاعات زیر پیام (ساعت و سطل زباله) */
+/* ۷. بخش ساعت و سطل زباله */
 .message-info {
   display: flex;
   align-items: center;
@@ -265,12 +261,10 @@ html, body, #root {
   width: 100%;
 }
 
-/* چیدمان برای پیام‌های خودمان (ساعت سمت راست، سطل سمت چپ) */
 .message-wrapper.outgoing .message-info {
   flex-direction: row; 
 }
 
-/* چیدمان برای پیام‌های طرف مقابل */
 .message-wrapper.incoming .message-info {
   flex-direction: row-reverse;
 }
@@ -280,7 +274,6 @@ html, body, #root {
   color: #7f91a4;
 }
 
-/* دکمه حذف (سطل زباله) */
 .delete-btn {
   font-size: 0.8rem;
   cursor: pointer;
@@ -294,7 +287,7 @@ html, body, #root {
   transform: scale(1.2);
 }
 
-/* ۷. باکس ارسال پیام */
+/* ۸. باکس ارسال پیام */
 .input-area {
   background-color: #17212b;
   padding: 10px 15px;
@@ -302,7 +295,7 @@ html, body, #root {
   align-items: center;
   gap: 10px;
   flex-shrink: 0; 
-  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); /* اصلاح برای پایین گوشی */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); 
 }
 
 .input-area input {
@@ -344,7 +337,6 @@ html, body, #root {
   margin-right: 2px;
 }
 
-/* ۸. صفحه لودینگ */
 .loading-screen {
   display: flex;
   justify-content: center;
