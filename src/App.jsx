@@ -405,7 +405,7 @@ function App() {
     setReactionPickerMsgId(null);
   };
 
-  // 🔥 تابع جدید برای استخراج مسیر فایل از URL
+  // 🔥 تابع استخراج مسیر فایل از URL
   const getStoragePath = (url) => {
     if (!url) return null;
     try {
@@ -417,44 +417,46 @@ function App() {
     }
   };
 
+  // 🔥 حذف پیام تکی همراه با فایل فیزیکی
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const msg = messages.find(m => m.id === msgId);
       
-      // 🔥 پاک کردن فایل فیزیکی از استوریج
       if (msg) {
         const fileUrl = msg.image_url || msg.audio_url;
         if (fileUrl) {
           const path = getStoragePath(fileUrl);
           if (path) {
-            await supabase.storage.from('chat-images').remove([path]);
+            const { error: storageError } = await supabase.storage.from('chat-images').remove([path]);
+            if (storageError) console.error("خطا در حذف فایل از استوریج:", storageError);
           }
         }
       }
 
-      // پاک کردن از دیتابیس
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
       if (!error) setMessages((prev) => prev.filter((m) => m.id !== msgId));
     }
   };
 
+  // 🔥 حذف کل چت همراه با فایل‌های فیزیکی
   const handleClearChat = async (mode) => {
     if (mode === 'me') {
       const { error } = await supabase.rpc('delete_chat_for_user', { chat_id_param: chatId, user_id_param: user.id });
       if (error) console.error(error);
       setMessages([]); setChatUser(null); setChatId(null);
     } else if (mode === 'both') {
-      // 🔥 پاک کردن تمام فایل‌های فیزیکی قبل از حذف دیتابیس
       const { data: msgs } = await supabase.from('messages').select('image_url, audio_url').eq('chat_id', chatId);
+      
       if (msgs) {
         const paths = msgs.map(m => getStoragePath(m.image_url || m.audio_url)).filter(Boolean);
         if (paths.length > 0) {
-          await supabase.storage.from('chat-images').remove(paths);
+          const { error: storageError } = await supabase.storage.from('chat-images').remove(paths);
+          if (storageError) console.error("خطا در حذف فایل‌ها از استوریج:", storageError);
         }
       }
 
       const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
-      if (error) console.error(error);
+      if (error) console.error("خطا در حذف پیام‌ها از دیتابیس:", error);
       setMessages([]); setChatUser(null); setChatId(null);
     }
     setShowClearModal(false);
