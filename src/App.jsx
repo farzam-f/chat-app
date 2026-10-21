@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-import imageCompression from 'browser-image-compression'; // ایمپورت کتابخانه
+import imageCompression from 'browser-image-compression';
 import './App.css';
 
 function App() {
@@ -9,6 +9,10 @@ function App() {
   const [userCode, setUserCode] = useState('');
   const [userName, setUserName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
+  
+  // استیت‌های مربوط به چت
+  const [chatList, setChatList] = useState([]);
+  const [isSearching, setIsSearching] = useState(false); // آیا باکس جستجو باز است؟
   const [targetCode, setTargetCode] = useState('');
   const [chatUser, setChatUser] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -18,7 +22,7 @@ function App() {
   
   const fileInputRef = useRef(null);
 
-  // ... (بقیه کدهای مربوط به لاگین، تنظیم پروفایل، جستجو، دریافت پیام و ارسال پیام بدون تغییر باقی می‌مانند)
+  // ۱. لاگین ناشناس
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -33,6 +37,7 @@ function App() {
     checkUser();
   }, []);
 
+  // تولید کد اختصاصی
   const generateUniqueCode = async () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -43,12 +48,15 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
+  // ۲. تنظیم کد و اسم
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
         let localCode = localStorage.getItem('myChatCode');
         const { data, error } = await supabase.from('profiles').select('code, username').eq('id', user.id).maybeSingle();
+        
         if (error) return console.error(error);
+
         if (!data) {
           if (!localCode) {
             localCode = await generateUniqueCode();
@@ -73,33 +81,107 @@ function App() {
     setupUserProfile();
   }, [user]);
 
+  // ۳. گرفتن لیست چت‌ها
+  const fetchChatList = async () => {
+    if (!user) return;
+    
+    // گرفتن تمام پیام‌هایی که کاربر فرستاده یا دریافت کرده
+    const { data: msgs, error } = await supabase
+      .from('messages')
+      .select('chat_id, content, image_url, created_at')
+      .like('chat_id', `%${user.id}%`)
+      .order('created_at', { ascending: false });
+
+    if (error || !msgs) return;
+
+    // پیدا کردن چت‌های یکتا و آخرین پیام هر چت
+    const uniqueChats = {};
+    msgs.forEach(msg => {
+      if (!uniqueChats[msg.chat_id]) {
+        uniqueChats[msg.chat_id] = msg; // چون مرتب شده، اولین پیام آخرین پیام است
+      }
+    });
+
+    const chatIds = Object.keys(uniqueChats);
+    if (chatIds.length === 0) {
+      setChatList([]);
+      return;
+    }
+
+    // پیدا کردن آیدی طرف مقابل از اسم چت
+    const otherUids = chatIds.map(id => id.split('_').find(uid => uid !== user.id));
+
+    // گرفتن پروفایل طرف مقابل‌ها
+    const { data: profiles } = await supabase.from('profiles').select('id, code, username').in('id', otherUids);
+
+    // ساختن لیست نهایی
+    const finalList = chatIds.map(chatId => {
+      const otherUid = chatId.split('_').find(uid => uid !== user.id);
+      const profile = profiles?.find(p => p.id === otherUid);
+      const lastMsg = uniqueChats[chatId];
+      
+      return {
+        chatId,
+        otherUid,
+        name: profile?.username || `کاربر ${profile?.code || ''}`,
+        code: profile?.code,
+        lastMessage: lastMsg.image_url ? '📷 عکس' : lastMsg.content,
+        lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
+      };
+    });
+
+    setChatList(finalList);
+  };
+
+  // وقتی کاربر لاگین کرد یا از چت خارج شد، لیست رو آپدیت کن
+  useEffect(() => {
+    if (user && !chatId) {
+      fetchChatList();
+    }
+  }, [user, chatId]);
+
+  // ذخیره نام
   const saveName = async () => {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
     setIsEditingName(false);
+    fetchChatList(); // آپدیت لیست برای اینکه اسم جدید تو چت‌ها هم دیده بشه
   };
 
+  // جستجوی کاربر جدید
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
     if (code === userCode) return alert('این کد خودتان است!');
+    
     const { data } = await supabase.from('profiles').select('id, code, username').eq('code', code).maybeSingle();
+    
     if (data) {
-      const newChatId = [user.id, data.id].sort().join('_');
-      setChatUser({ uid: data.id, code: data.code, name: data.username });
-      setChatId(newChatId);
+      openChat(data.id, data.code, data.username);
     } else {
       alert('کاربری با این کد پیدا نشد.');
     }
   };
 
+  // باز کردن یک چت
+  const openChat = (otherUid, otherCode, otherName) => {
+    const newChatId = [user.id, otherUid].sort().join('_');
+    setChatUser({ uid: otherUid, code: otherCode, name: otherName });
+    setChatId(newChatId);
+    setIsSearching(false); // بستن باکس جستجو
+    setTargetCode('');
+  };
+
+  // دریافت پیام‌ها (Real-time)
   useEffect(() => {
     if (!chatId) return;
+
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
       if (data) setMessages(data);
     };
     fetchMessages();
+
     const channel = supabase
       .channel('chat-room')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
@@ -109,14 +191,17 @@ function App() {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .subscribe();
+
     return () => supabase.removeChannel(channel);
   }, [chatId]);
 
+  // ارسال پیام متنی
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
     const msgText = newMessage;
     setNewMessage('');
+
     await supabase.from('messages').insert({
       chat_id: chatId,
       sender_id: user.id,
@@ -124,42 +209,29 @@ function App() {
     });
   };
 
-  // ✅ تابع آپلود عکس با فشرده‌سازی
+  // آپلود عکس با فشرده‌سازی
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
 
     setUploading(true);
-    
     try {
-      // تنظیمات فشرده‌سازی
       const options = {
-        maxSizeMB: 0.5, // حداکثر حجم خروجی 500 کیلوبایت
-        maxWidthOrHeight: 1280, // حداکثر ابعاد 1280 پیکسل
-        useWebWorker: true, // استفاده از Web Worker برای جلوگیری از فریز شدن صفحه
-        fileType: 'image/webp', // تبدیل به فرمت WebP برای حجم کمتر
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 1280,
+        useWebWorker: true,
+        fileType: 'image/webp',
       };
-
-      // فشرده‌سازی عکس
       const compressedFile = await imageCompression(file, options);
-
-      // آپلود نسخه فشرده شده به Supabase
       const fileExt = compressedFile.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
       const filePath = `${chatId}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(filePath, compressedFile);
-
+      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
 
-      // گرفتن لینک عمومی عکس
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-images')
-        .getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
 
-      // ذخیره لینک عکس در دیتابیس
       await supabase.from('messages').insert({
         chat_id: chatId,
         sender_id: user.id,
@@ -176,6 +248,7 @@ function App() {
     }
   };
 
+  // حذف پیام
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
@@ -200,6 +273,7 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* هدر بالا */}
       <header className="header">
         <div className="profile-section">
           {isEditingName ? (
@@ -218,20 +292,58 @@ function App() {
         </div>
       </header>
 
+      {/* بدنه اصلی */}
       {!chatUser ? (
-        <div className="empty-state">
-          <div style={{ fontSize: '3rem', marginBottom: '20px' }}>💬</div>
-          <h3>کد اختصاصی دوستتان را وارد کنید</h3>
-          <form className="search-box" onSubmit={handleSearch}>
-            <input placeholder="مثلاً: A3B4C5" value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
-            <button type="submit">جستجو</button>
-          </form>
+        <div className="main-list-area">
+          {/* هدر لیست چت‌ها */}
+          <div className="list-header">
+            <h3>چت‌ها</h3>
+            <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
+              {isSearching ? 'بستن' : 'چت جدید +'}
+            </button>
+          </div>
+
+          {/* باکس جستجو (فقط وقتی دکمه چت جدید زده میشه) */}
+          {isSearching && (
+            <div className="search-area">
+              <form className="search-box" onSubmit={handleSearch}>
+                <input placeholder="کد اختصاصی دوستتان را وارد کنید..." value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
+                <button type="submit">شروع</button>
+              </form>
+            </div>
+          )}
+
+          {/* لیست چت‌ها */}
+          <div className="chat-list">
+            {chatList.length === 0 ? (
+              <div className="empty-list">هنوز چتی ندارید. با دکمه بالا یکی شروع کنید!</div>
+            ) : (
+              chatList.map(chat => (
+                <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name)}>
+                  <div className="avatar">{chat.name.charAt(0)}</div>
+                  <div className="chat-info">
+                    <div className="chat-name-time">
+                      <span className="chat-name">{chat.name}</span>
+                      <span className="chat-time">{chat.lastTime}</span>
+                    </div>
+                    <div className="chat-last-msg">{chat.lastMessage}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       ) : (
+        /* صفحه داخل چت */
         <div className="chat-container">
           <div className="chat-header">
-            <h3>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
-            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>بستن ✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="avatar-small">{chatUser.name ? chatUser.name.charAt(0) : '?'}</div>
+              <h3>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
+            </div>
+            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>
+              بستن ✕
+            </button>
           </div>
 
           <div className="messages-area">
