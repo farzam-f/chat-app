@@ -22,6 +22,7 @@ function App() {
 
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null); // استیت جدید برای پاسخ
   
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
@@ -62,9 +63,7 @@ function App() {
         }
       });
 
-    return () => {
-      supabase.removeChannel(presenceChannel);
-    };
+    return () => { supabase.removeChannel(presenceChannel); };
   }, [user]);
 
   const generateUniqueCode = async () => {
@@ -181,9 +180,10 @@ function App() {
     setIsSearching(false);
     setTargetCode('');
     setIsOtherTyping(false);
+    setReplyingTo(null); // موقع باز کردن چت جدید، حالت پاسخ ریست بشه
   };
 
-  // دریافت پیام‌ها و وضعیت تایپ (Real-time)
+  // دریافت پیام‌ها
   useEffect(() => {
     if (!chatId) return;
 
@@ -202,7 +202,6 @@ function App() {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        // ✅ استفاده از user?.id برای جلوگیری از خطا وقتی user هنوز لود نشده
         if (payload.user_id !== user?.id) { 
           setIsOtherTyping(true);
           clearTimeout(typingTimeoutRef.current);
@@ -217,26 +216,31 @@ function App() {
       supabase.removeChannel(channel);
       setIsOtherTyping(false);
     };
-  // ✅ تغییر dependency array از user.id به user
-  }, [chatId, user]); 
+  }, [chatId, user]);
 
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
     if (e.target.value.length > 0 && chatChannelRef.current) {
-      chatChannelRef.current.send({
-        type: 'broadcast',
-        event: 'typing',
-        payload: { user_id: user.id }
-      });
+      chatChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { user_id: user.id } });
     }
   };
 
+  // ارسال پیام (با قابلیت پاسخ)
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
+    
     const msgText = newMessage;
     setNewMessage('');
-    await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: msgText });
+    
+    await supabase.from('messages').insert({ 
+      chat_id: chatId, 
+      sender_id: user.id, 
+      content: msgText,
+      reply_to_id: replyingTo ? replyingTo.id : null // ثبت آیدی پیام پاسخ داده شده
+    });
+
+    setReplyingTo(null); // بعد از ارسال، حالت پاسخ پاک بشه
   };
 
   const handleImageUpload = async (e) => {
@@ -252,7 +256,15 @@ function App() {
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl });
+      
+      await supabase.from('messages').insert({ 
+        chat_id: chatId, 
+        sender_id: user.id, 
+        content: '', 
+        image_url: publicUrl,
+        reply_to_id: replyingTo ? replyingTo.id : null // عکس هم می‌تونه پاسخ باشه
+      });
+      setReplyingTo(null);
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
@@ -366,7 +378,7 @@ function App() {
                 </div>
               </div>
             </div>
-            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>
+            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); setReplyingTo(null); }}>
               بستن ✕
             </button>
           </div>
@@ -374,19 +386,48 @@ function App() {
           <div className="messages-area">
             {messages.map(msg => {
               const isMe = msg.sender_id === user.id;
+              // پیدا کردن پیامِ پاسخ داده شده از بین پیام‌های موجود
+              const repliedMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null;
+
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
                   <div className="message-bubble">
+                    
+                    {/* بخش نمایش پیام نقل قول شده */}
+                    {repliedMsg && (
+                      <div className="quoted-message">
+                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
+                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : repliedMsg.content}</div>
+                      </div>
+                    )}
+
                     {msg.image_url ? <img src={msg.image_url} alt="sent" className="chat-image" /> : msg.content}
                   </div>
+                  
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
-                    {isMe && <span className="delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</span>}
+                    <div className="message-actions">
+                      {/* دکمه پاسخ برای همه پیام‌ها */}
+                      <span className="reply-btn" onClick={() => setReplyingTo(msg)} title="پاسخ">↩️</span>
+                      {/* دکمه حذف فقط برای پیام‌های خودمان */}
+                      {isMe && <span className="delete-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>}
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* بنر نمایش پاسخ بالای باکس تایپ */}
+          {replyingTo && (
+            <div className="reply-banner">
+              <div className="reply-banner-info">
+                <span className="reply-banner-name">{replyingTo.sender_id === user.id ? 'شما' : chatUser.name}</span>
+                <span className="reply-banner-text">{replyingTo.image_url ? '📷 عکس' : replyingTo.content}</span>
+              </div>
+              <button className="cancel-reply-btn" onClick={() => setReplyingTo(null)}>✕</button>
+            </div>
+          )}
 
           <form className="input-area" onSubmit={sendMessage}>
             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />

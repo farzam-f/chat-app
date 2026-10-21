@@ -438,7 +438,7 @@ html, body, #root {
   margin-bottom: 5px;
 }
 
-/* بخش ساعت و سطل زباله */
+/* ۷. بخش اطلاعات پیام (ساعت، پاسخ، حذف) */
 .message-info {
   display: flex;
   align-items: center;
@@ -457,20 +457,89 @@ html, body, #root {
   color: #7f91a4;
 }
 
-.delete-btn {
+.message-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.reply-btn, .delete-btn {
   font-size: 0.8rem;
   cursor: pointer;
   opacity: 0.5;
   transition: 0.2s;
-  margin: 0 8px;
 }
 
-.delete-btn:hover {
+.reply-btn:hover, .delete-btn:hover {
   opacity: 1;
   transform: scale(1.2);
 }
 
-/* ۷. باکس ارسال پیام */
+/* ۸. قابلیت پاسخ به پیام (Reply) */
+.quoted-message {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-right: 3px solid #5eb5f7;
+  padding: 5px 10px;
+  border-radius: 5px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.quoted-name {
+  color: #5eb5f7;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.quoted-text {
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reply-banner {
+  background-color: #242f3d;
+  padding: 8px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #17212b;
+  border-right: 3px solid #5eb5f7;
+}
+
+.reply-banner-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reply-banner-name {
+  color: #5eb5f7;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.reply-banner-text {
+  color: #ccc;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.cancel-reply-btn {
+  background: none;
+  border: none;
+  color: #ff4d4d;
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* ۹. باکس ارسال پیام */
 .input-area {
   background-color: #17212b;
   padding: 10px 15px;
