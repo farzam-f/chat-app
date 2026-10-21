@@ -12,6 +12,11 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
   
+  // استیت‌های تم و مسدودسازی
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [isBlockedByMe, setIsBlockedByMe] = useState(false);
+  const [hasBlockedMe, setHasBlockedMe] = useState(false);
+
   const [isEditingName, setIsEditingName] = useState(false);
   const [chatList, setChatList] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -25,7 +30,6 @@ function App() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
@@ -35,6 +39,14 @@ function App() {
   const chatChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  // تغییر تم
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
@@ -54,7 +66,7 @@ function App() {
     checkUser();
   }, []);
 
-  // ۲. سیستم آنلاین بودن (Presence)
+  // ۲. سیستم آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -163,14 +175,37 @@ function App() {
     else alert('کاربری با این کد پیدا نشد.');
   };
 
-  const openChat = (otherUid, otherCode, otherName, otherAvatar) => {
+  // باز کردن چت و چک کردن وضعیت مسدودیت
+  const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
     setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
+
+    // چک کردن بلاک شدن
+    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
+    const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).single();
+
+    setIsBlockedByMe(myProfile?.blocked_ids?.includes(otherUid) || false);
+    setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
 
-  // ۵. دریافت پیام‌ها و رویدادهای لحظه‌ای
+  // مسدود / رفع مسدودیت
+  const toggleBlock = async () => {
+    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
+    let blocked = myProfile?.blocked_ids || [];
+
+    if (isBlockedByMe) {
+      blocked = blocked.filter(id => id !== chatUser.uid);
+    } else {
+      blocked.push(chatUser.uid);
+    }
+
+    await supabase.from('profiles').update({ blocked_ids: blocked }).eq('id', user.id);
+    setIsBlockedByMe(!isBlockedByMe);
+  };
+
+  // ۵. دریافت پیام‌ها
   useEffect(() => {
     if (!chatId) return;
 
@@ -214,19 +249,15 @@ function App() {
     }
   };
 
-  // ۶. ارسال یا ویرایش پیام
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !chatId) return;
+    if (!newMessage.trim() || !chatId || isBlockedByMe || hasBlockedMe) return;
     const msgText = newMessage;
     setNewMessage('');
     
     if (editingMessage) {
       const { error } = await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
-      if (error) {
-        console.error("خطای ویرایش:", error);
-        alert("خطا در ویرایش پیام! (کنسول را چک کنید)");
-      }
+      if (error) console.error("خطای ویرایش:", error);
       setEditingMessage(null);
     } else {
       await supabase.from('messages').insert({ 
@@ -238,10 +269,9 @@ function App() {
     }
   };
 
-  // ۷. آپلود عکس
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || !chatId) return;
+    if (!file || !chatId || isBlockedByMe || hasBlockedMe) return;
     setUploading(true);
     try {
       const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
@@ -260,11 +290,9 @@ function App() {
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
-  // ۸. ثبت ری‌اکشن
   const handleReaction = async (msgId, emoji) => {
     const msg = messages.find(m => m.id === msgId);
     if (!msg) return;
-
     let newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
     
     if (newReactions[emoji] && newReactions[emoji].includes(user.id)) {
@@ -274,14 +302,8 @@ function App() {
       if (!newReactions[emoji]) newReactions[emoji] = [];
       newReactions[emoji].push(user.id);
     }
-    
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reactions: newReactions } : m));
-    
-    const { error } = await supabase.from('messages').update({ reactions: newReactions }).eq('id', msgId);
-    if (error) {
-      console.error("خطای ری‌اکشن:", error);
-      alert("خطا در ثبت ری‌اکشن! (کنسول را چک کنید)");
-    }
+    await supabase.from('messages').update({ reactions: newReactions }).eq('id', msgId);
     setReactionPickerMsgId(null);
   };
 
@@ -293,7 +315,6 @@ function App() {
   };
 
   const addEmoji = (emoji) => { setNewMessage(prev => prev + emoji); };
-
   const copyCode = () => { navigator.clipboard.writeText(userCode); alert('کد اختصاصی کپی شد!'); };
   const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
 
@@ -322,7 +343,14 @@ function App() {
             </h2>
           )}
         </div>
-        <div className="user-code-badge" onClick={copyCode}>{userCode || '...'}</div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* دکمه تغییر تم */}
+          <button className="theme-toggle-btn" onClick={toggleTheme} title="تغییر تم">
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <div className="user-code-badge" onClick={copyCode}>{userCode || '...'}</div>
+        </div>
       </header>
 
       {!chatUser ? (
@@ -384,10 +412,25 @@ function App() {
                 </div>
               </div>
             </div>
-            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); setReplyingTo(null); setEditingMessage(null); }}>
-              بستن ✕
-            </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* دکمه بلاک */}
+              <button className="block-btn" onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
+                {isBlockedByMe ? '✅' : '🚫'}
+              </button>
+              <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); setReplyingTo(null); setEditingMessage(null); }}>
+                بستن ✕
+              </button>
+            </div>
           </div>
+
+          {/* پیام‌های سیستمی برای بلاک */}
+          {isBlockedByMe && (
+            <div className="system-message blocked-msg">شما این کاربر را مسدود کرده‌اید. برای ارسال پیام، ابتدا رفع مسدودیت کنید.</div>
+          )}
+          {hasBlockedMe && (
+            <div className="system-message blocked-msg">شما توسط این کاربر مسدود شده‌اید و نمی‌توانید پیام ارسال کنید.</div>
+          )}
 
           <div className="messages-area">
             {messages.map(msg => {
@@ -397,7 +440,6 @@ function App() {
 
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
-                  
                   <div className="message-bubble">
                     {repliedMsg && (
                       <div className="quoted-message">
@@ -424,7 +466,6 @@ function App() {
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
-                      
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                         <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
                         {reactionPickerMsgId === msg.id && (
@@ -435,7 +476,6 @@ function App() {
                           </div>
                         )}
                       </div>
-                      
                       <span className="action-btn" onClick={() => setReplyingTo(msg)} title="پاسخ">↩️</span>
                       {isMe && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
                       {isMe && <span className="action-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>}
@@ -448,9 +488,9 @@ function App() {
           </div>
 
           {(replyingTo || editingMessage) && (
-            <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : '#5eb5f7' }}>
+            <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
               <div className="reply-banner-info">
-                <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : '#5eb5f7' }}>
+                <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
                   {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser.name}`)}
                 </span>
                 <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.image_url ? '📷 عکس' : replyingTo.content)}</span>
@@ -461,12 +501,12 @@ function App() {
 
           <form className="input-area" onSubmit={handleSendMessage}>
             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
-            <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>
+            <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading || isBlockedByMe || hasBlockedMe}>
               {uploading ? '⏳' : '📎'}
             </button>
             
             <div style={{ position: 'relative' }}>
-              <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
+              <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} disabled={isBlockedByMe || hasBlockedMe}>😊</button>
               {showEmojiPicker && (
                 <div className="emoji-picker">
                   {EMOJIS.map(e => <span key={e} onClick={() => addEmoji(e)}>{e}</span>)}
@@ -475,10 +515,14 @@ function App() {
             </div>
 
             <input 
-              type="text" placeholder="پیام..." value={newMessage} onChange={handleTyping}
+              type="text" 
+              placeholder={isBlockedByMe || hasBlockedMe ? "امکان ارسال پیام وجود ندارد..." : "پیام..."} 
+              value={newMessage} 
+              onChange={handleTyping}
+              disabled={isBlockedByMe || hasBlockedMe}
             />
             
-            <button type="submit" className="send-btn">
+            <button type="submit" className="send-btn" disabled={isBlockedByMe || hasBlockedMe}>
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>
           </form>
