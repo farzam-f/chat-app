@@ -26,7 +26,6 @@ function App() {
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   
-  // استیت‌های جدید
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
@@ -35,15 +34,12 @@ function App() {
   const avatarInputRef = useRef(null);
   const chatChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const messagesEndRef = useRef(null); // برای اسکرول خودکار به پایین
+  const messagesEndRef = useRef(null);
 
-  // اسکرول خودکار به پایین
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. لاگین ناشناس
+  // ۱. لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -58,7 +54,7 @@ function App() {
     checkUser();
   }, []);
 
-  // ۲. سیستم آنلاین بودن
+  // ۲. آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -172,27 +168,30 @@ function App() {
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
   };
 
-  // دریافت پیام‌ها (INSERT, DELETE, UPDATE)
+  // دریافت پیام‌ها
   useEffect(() => {
     if (!chatId) return;
 
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
-      if (data) setMessages(data);
+      if (data) {
+        // اطمینان از اینکه ری‌اکشن‌ها همیشه آبجکت هستند
+        const parsedData = data.map(m => ({ ...m, reactions: m.reactions || {} }));
+        setMessages(parsedData);
+      }
     };
     fetchMessages();
 
     const channel = supabase
       .channel(`chat-room-${chatId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
-        setMessages((prev) => [...prev, payload.new]);
+        setMessages((prev) => [...prev, { ...payload.new, reactions: payload.new.reactions || {} }]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
-        // آپدیت پیام (ویرایش یا ری‌اکشن)
-        setMessages((prev) => prev.map(msg => msg.id === payload.new.id ? payload.new : msg));
+        setMessages((prev) => prev.map(msg => msg.id === payload.new.id ? { ...payload.new, reactions: payload.new.reactions || {} } : msg));
       })
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
         if (payload.user_id !== user?.id) { 
@@ -214,23 +213,20 @@ function App() {
     }
   };
 
-  // ارسال یا ویرایش پیام
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
-    
     const msgText = newMessage;
     setNewMessage('');
     
     if (editingMessage) {
-      // حالت ویرایش
       await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
       setEditingMessage(null);
     } else {
-      // حالت ارسال جدید
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: msgText,
-        reply_to_id: replyingTo ? replyingTo.id : null
+        reply_to_id: replyingTo ? replyingTo.id : null,
+        reactions: {}
       });
       setReplyingTo(null);
     }
@@ -250,29 +246,34 @@ function App() {
       
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl,
-        reply_to_id: replyingTo ? replyingTo.id : null
+        reply_to_id: replyingTo ? replyingTo.id : null,
+        reactions: {}
       });
       setReplyingTo(null);
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
-  // ری‌اکشن زدن
+  // ثبت ری‌اکشن
   const handleReaction = async (msgId, emoji) => {
     const msg = messages.find(m => m.id === msgId);
-    let newReactions = { ...(msg.reactions || {}) }; // کپی از آبجکت ری‌اکشن‌ها
+    if (!msg) return;
+
+    // کپی عمیق برای جلوگیری از باگ‌های React
+    let newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
     
     if (newReactions[emoji] && newReactions[emoji].includes(user.id)) {
-      // اگر کاربر قبلا این ری‌اکشن رو زده بود، پاکش کن
       newReactions[emoji] = newReactions[emoji].filter(id => id !== user.id);
       if (newReactions[emoji].length === 0) delete newReactions[emoji];
     } else {
-      // اگر نزده بود، اضافه کن
       if (!newReactions[emoji]) newReactions[emoji] = [];
       newReactions[emoji].push(user.id);
     }
     
+    // آپدیت خوش‌بینانه (بلافاصله در UI اعمال میشه)
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reactions: newReactions } : m));
+    
     await supabase.from('messages').update({ reactions: newReactions }).eq('id', msgId);
-    setReactionPickerMsgId(null); // بستن منوی ری‌اکشن
+    setReactionPickerMsgId(null);
   };
 
   const deleteMessage = async (msgId) => {
@@ -282,19 +283,10 @@ function App() {
     }
   };
 
-  const addEmoji = (emoji) => {
-    setNewMessage(prev => prev + emoji);
-  };
+  const addEmoji = (emoji) => { setNewMessage(prev => prev + emoji); };
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(userCode);
-    alert('کد اختصاصی کپی شد!');
-  };
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-  };
+  const copyCode = () => { navigator.clipboard.writeText(userCode); alert('کد اختصاصی کپی شد!'); };
+  const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
 
   if (loading) return <div className="loading-screen">در حال اتصال...</div>;
   if (!user) return <div className="loading-screen">در حال ساخت حساب...</div>;
@@ -392,13 +384,28 @@ function App() {
             {messages.map(msg => {
               const isMe = msg.sender_id === user.id;
               const repliedMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null;
+              const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0;
 
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
                   
-                  {/* نمایش ری‌اکشن‌ها */}
-                  {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                    <div className="reactions-display">
+                  {/* حباب پیام */}
+                  <div className="message-bubble">
+                    {repliedMsg && (
+                      <div className="quoted-message">
+                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
+                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : repliedMsg.content}</div>
+                      </div>
+                    )}
+                    {msg.image_url ? <img src={msg.image_url} alt="sent" className="chat-image" /> : msg.content}
+                    <div className="message-meta">
+                       {msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}
+                    </div>
+                  </div>
+                  
+                  {/* نمایش ری‌اکشن‌ها (خارج از حباب) */}
+                  {hasReactions && (
+                    <div className="reactions-container">
                       {Object.entries(msg.reactions).map(([emoji, users]) => (
                         <span key={emoji} className="reaction-badge" onClick={() => handleReaction(msg.id, emoji)}>
                           {emoji} {users.length > 1 ? users.length : ''}
@@ -407,27 +414,14 @@ function App() {
                     </div>
                   )}
 
-                  <div className="message-bubble">
-                    {repliedMsg && (
-                      <div className="quoted-message">
-                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
-                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : repliedMsg.content}</div>
-                      </div>
-                    )}
-
-                    {msg.image_url ? <img src={msg.image_url} alt="sent" className="chat-image" /> : msg.content}
-                    
-                    <div className="message-meta">
-                       {msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}
-                    </div>
-                  </div>
-                  
+                  {/* اطلاعات و دکمه‌ها */}
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
-                      {/* دکمه ری‌اکشن */}
-                      <div style={{ position: 'relative' }}>
-                        <span className="action-btn" onClick={() => setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id)}>❤️</span>
+                      
+                      {/* منوی ری‌اکشن */}
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
                         {reactionPickerMsgId === msg.id && (
                           <div className={`reaction-picker ${isMe ? 'picker-left' : 'picker-right'}`}>
                             {EMOJIS.slice(0, 6).map(e => (
@@ -448,7 +442,6 @@ function App() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* بنر وضعیت (پاسخ یا ویرایش) */}
           {(replyingTo || editingMessage) && (
             <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : '#5eb5f7' }}>
               <div className="reply-banner-info">
@@ -467,7 +460,6 @@ function App() {
               {uploading ? '⏳' : '📎'}
             </button>
             
-            {/* دکمه ایموجی */}
             <div style={{ position: 'relative' }}>
               <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
               {showEmojiPicker && (
