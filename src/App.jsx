@@ -27,7 +27,6 @@ function App() {
   const [chatId, setChatId] = useState(null);
   const [uploading, setUploading] = useState(false);
 
-  // استیت‌های ضبط صدا
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -298,7 +297,6 @@ function App() {
     }
   };
 
-  // ۶. توابع ضبط صدا
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -318,16 +316,12 @@ function App() {
       setIsRecording(true);
     } catch (err) {
       alert('دسترسی به میکروفون داده نشد یا مرورگر پشتیبانی نمی‌کند.');
-      console.error(err);
     }
   };
 
   const stopRecording = (send = true) => {
     if (mediaRecorderRef.current && isRecording) {
-      if (!send) {
-        // لغو ضبط
-        mediaRecorderRef.current.onstop = null; 
-      }
+      if (!send) mediaRecorderRef.current.onstop = null; 
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
@@ -340,20 +334,13 @@ function App() {
       const filePath = `${chatId}/${Date.now()}-audio.webm`;
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, blob);
       if (uploadError) throw uploadError;
-      
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: '', audio_url: publicUrl,
         reply_to_id: replyingTo ? replyingTo.id : null, reactions: {}
       });
       setReplyingTo(null);
-    } catch (error) {
-      alert('خطا در آپلود پیام صوتی!');
-      console.error(error);
-    } finally {
-      setUploading(false);
-    }
+    } catch (error) { alert('خطا در آپلود پیام صوتی!'); } finally { setUploading(false); }
   };
 
   const handleSendMessage = async (e) => {
@@ -418,10 +405,36 @@ function App() {
     setReactionPickerMsgId(null);
   };
 
+  // 🔥 تابع جدید برای استخراج مسیر فایل از URL
+  const getStoragePath = (url) => {
+    if (!url) return null;
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/chat-images/');
+      return pathParts.length > 1 ? decodeURIComponent(pathParts[1]) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
+      const msg = messages.find(m => m.id === msgId);
+      
+      // 🔥 پاک کردن فایل فیزیکی از استوریج
+      if (msg) {
+        const fileUrl = msg.image_url || msg.audio_url;
+        if (fileUrl) {
+          const path = getStoragePath(fileUrl);
+          if (path) {
+            await supabase.storage.from('chat-images').remove([path]);
+          }
+        }
+      }
+
+      // پاک کردن از دیتابیس
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
-      if (!error) setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
+      if (!error) setMessages((prev) => prev.filter((m) => m.id !== msgId));
     }
   };
 
@@ -431,6 +444,15 @@ function App() {
       if (error) console.error(error);
       setMessages([]); setChatUser(null); setChatId(null);
     } else if (mode === 'both') {
+      // 🔥 پاک کردن تمام فایل‌های فیزیکی قبل از حذف دیتابیس
+      const { data: msgs } = await supabase.from('messages').select('image_url, audio_url').eq('chat_id', chatId);
+      if (msgs) {
+        const paths = msgs.map(m => getStoragePath(m.image_url || m.audio_url)).filter(Boolean);
+        if (paths.length > 0) {
+          await supabase.storage.from('chat-images').remove(paths);
+        }
+      }
+
       const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
       if (error) console.error(error);
       setMessages([]); setChatUser(null); setChatId(null);
@@ -591,7 +613,6 @@ function App() {
                       </div>
                     )}
                     
-                    {/* نمایش پیام صوتی */}
                     {msg.audio_url ? (
                       <audio controls src={msg.audio_url} className="voice-player" />
                     ) : msg.image_url ? (
@@ -651,7 +672,6 @@ function App() {
             </div>
           )}
 
-          {/* باکس ارسال و ضبط صدا */}
           <div className="input-area">
             {isRecording ? (
               <div className="recording-ui">
