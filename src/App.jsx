@@ -15,7 +15,7 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [hasBlockedMe, setHasBlockedMe] = useState(false);
-  const [showClearModal, setShowClearModal] = useState(false); // استیت جدید برای منوی حذف
+  const [showClearModal, setShowClearModal] = useState(false);
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [chatList, setChatList] = useState([]);
@@ -26,6 +26,11 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
   const [chatId, setChatId] = useState(null);
   const [uploading, setUploading] = useState(false);
+
+  // استیت‌های ضبط صدا
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -111,21 +116,18 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. دریافت لیست چت‌ها (با فیلتر کردن پیام‌های حذف شده برای من)
+  // ۴. دریافت لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
-    
     const { data: msgs, error } = await supabase
       .from('messages')
-      .select('chat_id, content, image_url, created_at, sender_id, is_read, deleted_for')
+      .select('chat_id, content, image_url, audio_url, created_at, sender_id, is_read, deleted_for')
       .like('chat_id', `%${user.id}%`)
       .order('created_at', { ascending: false });
 
     if (error || !msgs) return;
 
-    // فیلتر کردن پیام‌هایی که من برای خودم حذف کرده‌ام
     const visibleMsgs = msgs.filter(msg => !(msg.deleted_for || []).includes(user.id));
-
     const uniqueChats = {};
     const unreadCounts = {};
 
@@ -149,7 +151,7 @@ function App() {
       return {
         chatId, otherUid, name: profile?.username || `کاربر ${profile?.code || ''}`,
         code: profile?.code, avatarUrl: profile?.avatar_url,
-        lastMessage: lastMsg.image_url ? '📷 عکس' : lastMsg.content,
+        lastMessage: lastMsg.image_url ? '📷 عکس' : (lastMsg.audio_url ? '🎙️ پیام صوتی' : lastMsg.content),
         lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         unreadCount: unreadCounts[chatId] || 0
       };
@@ -159,7 +161,6 @@ function App() {
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
 
-  // شنونده زنده برای لیست چت‌ها
   useEffect(() => {
     if (!user) return;
     const globalChannel = supabase.channel('global-chats')
@@ -249,7 +250,7 @@ function App() {
     setIsBlockedByMe(!isBlockedByMe);
   };
 
-  // ۵. دریافت پیام‌ها (با فیلتر کردن پیام‌های حذف شده برای من)
+  // ۵. دریافت پیام‌ها
   useEffect(() => {
     if (!chatId) return;
 
@@ -269,13 +270,11 @@ function App() {
         setMessages((prev) => [...prev, { ...payload.new, reactions: payload.new.reactions || {} }]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-        // برای حذف کامل (برای هر دو نفر)
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
         setMessages((prev) => {
           const updated = prev.map(msg => msg.id === payload.new.id ? { ...payload.new, reactions: payload.new.reactions || {} } : msg);
-          // اگر پیام برای من حذف شد، از لیست حذفش کن
           return updated.filter(m => !(m.deleted_for || []).includes(user.id));
         });
       })
@@ -296,6 +295,64 @@ function App() {
     setNewMessage(e.target.value);
     if (e.target.value.length > 0 && chatChannelRef.current) {
       chatChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { user_id: user.id } });
+    }
+  };
+
+  // ۶. توابع ضبط صدا
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await uploadAudio(audioBlob);
+      };
+
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert('دسترسی به میکروفون داده نشد یا مرورگر پشتیبانی نمی‌کند.');
+      console.error(err);
+    }
+  };
+
+  const stopRecording = (send = true) => {
+    if (mediaRecorderRef.current && isRecording) {
+      if (!send) {
+        // لغو ضبط
+        mediaRecorderRef.current.onstop = null; 
+      }
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+    }
+  };
+
+  const uploadAudio = async (blob) => {
+    setUploading(true);
+    try {
+      const filePath = `${chatId}/${Date.now()}-audio.webm`;
+      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, blob);
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+      
+      await supabase.from('messages').insert({ 
+        chat_id: chatId, sender_id: user.id, content: '', audio_url: publicUrl,
+        reply_to_id: replyingTo ? replyingTo.id : null, reactions: {}
+      });
+      setReplyingTo(null);
+    } catch (error) {
+      alert('خطا در آپلود پیام صوتی!');
+      console.error(error);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -368,20 +425,15 @@ function App() {
     }
   };
 
-  // تابع حذف کل چت
   const handleClearChat = async (mode) => {
     if (mode === 'me') {
-      // حذف فقط برای من با استفاده از تابع دیتابیس
       const { error } = await supabase.rpc('delete_chat_for_user', { chat_id_param: chatId, user_id_param: user.id });
       if (error) console.error(error);
-      setMessages([]); // پاک کردن صفحه
-      setChatUser(null); setChatId(null);
+      setMessages([]); setChatUser(null); setChatId(null);
     } else if (mode === 'both') {
-      // حذف برای هر دو نفر (حذف فیزیکی از دیتابیس)
       const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
       if (error) console.error(error);
-      setMessages([]);
-      setChatUser(null); setChatId(null);
+      setMessages([]); setChatUser(null); setChatId(null);
     }
     setShowClearModal(false);
   };
@@ -493,7 +545,6 @@ function App() {
               <button className="block-btn" onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
                 {isBlockedByMe ? '✅' : '🚫'}
               </button>
-              {/* دکمه باز کردن منوی حذف */}
               <button className="block-btn" onClick={() => setShowClearModal(true)} title="حذف چت">
                 🗑️
               </button>
@@ -503,7 +554,6 @@ function App() {
             </div>
           </div>
 
-          {/* مودال حذف چت */}
           {showClearModal && (
             <div className="modal-overlay">
               <div className="modal-content">
@@ -537,10 +587,19 @@ function App() {
                     {repliedMsg && (
                       <div className="quoted-message">
                         <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
-                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : repliedMsg.content}</div>
+                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : (repliedMsg.audio_url ? '🎙️ پیام صوتی' : repliedMsg.content)}</div>
                       </div>
                     )}
-                    {msg.image_url ? <img src={msg.image_url} alt="sent" className="chat-image" /> : msg.content}
+                    
+                    {/* نمایش پیام صوتی */}
+                    {msg.audio_url ? (
+                      <audio controls src={msg.audio_url} className="voice-player" />
+                    ) : msg.image_url ? (
+                      <img src={msg.image_url} alt="sent" className="chat-image" />
+                    ) : (
+                      msg.content
+                    )}
+
                     <div className="message-meta">
                        {msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}
                     </div>
@@ -570,7 +629,7 @@ function App() {
                         )}
                       </div>
                       <span className="action-btn" onClick={() => setReplyingTo(msg)} title="پاسخ">↩️</span>
-                      {isMe && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
+                      {isMe && !msg.audio_url && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
                       {isMe && <span className="action-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>}
                     </div>
                   </div>
@@ -586,39 +645,57 @@ function App() {
                 <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
                   {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser.name}`)}
                 </span>
-                <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.image_url ? '📷 عکس' : replyingTo.content)}</span>
+                <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.image_url ? '📷 عکس' : (replyingTo.audio_url ? '🎙️ پیام صوتی' : replyingTo.content))}</span>
               </div>
               <button className="cancel-reply-btn" onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }}>✕</button>
             </div>
           )}
 
-          <form className="input-area" onSubmit={handleSendMessage}>
-            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
-            <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading || isBlockedByMe || hasBlockedMe}>
-              {uploading ? '⏳' : '📎'}
-            </button>
-            
-            <div style={{ position: 'relative' }}>
-              <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} disabled={isBlockedByMe || hasBlockedMe}>😊</button>
-              {showEmojiPicker && (
-                <div className="emoji-picker">
-                  {EMOJIS.map(e => <span key={e} onClick={() => addEmoji(e)}>{e}</span>)}
+          {/* باکس ارسال و ضبط صدا */}
+          <div className="input-area">
+            {isRecording ? (
+              <div className="recording-ui">
+                <span className="recording-dot"></span>
+                <span className="recording-text">در حال ضبط...</span>
+                <button className="stop-record-btn" onClick={() => stopRecording(true)}>⏹️ ارسال</button>
+                <button className="cancel-record-btn" onClick={() => stopRecording(false)}>✕ لغو</button>
+              </div>
+            ) : (
+              <form onSubmit={handleSendMessage} className="input-form">
+                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
+                <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading || isBlockedByMe || hasBlockedMe}>
+                  {uploading ? '⏳' : '📎'}
+                </button>
+                
+                <div style={{ position: 'relative' }}>
+                  <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} disabled={isBlockedByMe || hasBlockedMe}>😊</button>
+                  {showEmojiPicker && (
+                    <div className="emoji-picker">
+                      {EMOJIS.map(e => <span key={e} onClick={() => addEmoji(e)}>{e}</span>)}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <input 
-              type="text" 
-              placeholder={isBlockedByMe || hasBlockedMe ? "امکان ارسال پیام وجود ندارد..." : "پیام..."} 
-              value={newMessage} 
-              onChange={handleTyping}
-              disabled={isBlockedByMe || hasBlockedMe}
-            />
-            
-            <button type="submit" className="send-btn" disabled={isBlockedByMe || hasBlockedMe}>
-              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
-            </button>
-          </form>
+                <input 
+                  type="text" 
+                  placeholder={isBlockedByMe || hasBlockedMe ? "امکان ارسال پیام وجود ندارد..." : "پیام..."} 
+                  value={newMessage} 
+                  onChange={handleTyping}
+                  disabled={isBlockedByMe || hasBlockedMe}
+                />
+                
+                {newMessage.trim() ? (
+                  <button type="submit" className="send-btn" disabled={isBlockedByMe || hasBlockedMe}>
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                  </button>
+                ) : (
+                  <button type="button" className="send-btn mic-btn" onClick={startRecording} disabled={isBlockedByMe || hasBlockedMe} title="ضبط پیام صوتی">
+                    🎙️
+                  </button>
+                )}
+              </form>
+            )}
+          </div>
         </div>
       )}
     </div>

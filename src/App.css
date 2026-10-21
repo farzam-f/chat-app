@@ -98,6 +98,15 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .message-meta { display: flex; justify-content: flex-end; margin-top: 4px; }
 .edited-tag { font-size: 0.65rem; color: var(--msg-time); }
 
+/* استایل پلیر صوتی */
+.voice-player {
+  width: 250px;
+  height: 40px;
+  outline: none;
+  border-radius: 20px;
+  margin-bottom: 5px;
+}
+
 /* ری‌اکشن‌ها */
 .reactions-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -8px; margin-bottom: 4px; z-index: 5; }
 .reaction-badge { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 3px; color: var(--text-main); }
@@ -126,6 +135,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .cancel-reply-btn { background: none; border: none; color: #ff4d4d; font-size: 1rem; cursor: pointer; font-weight: bold; }
 
 .input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); position: relative; }
+.input-form { display: flex; width: 100%; align-items: center; gap: 10px; }
 .input-area input[type="text"] { flex: 1; background-color: var(--bg-input); border: none; padding: 14px 20px; border-radius: 25px; color: var(--text-main); font-family: inherit; font-size: 1rem; outline: none; min-width: 0; }
 .input-area input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .attach-btn, .emoji-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); padding: 0 5px; transition: 0.2s; }
@@ -133,82 +143,77 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .emoji-picker { position: absolute; bottom: 50px; right: 0; background-color: var(--bg-panel); border-radius: 10px; padding: 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); width: 200px; border: 1px solid var(--border-color); }
 .emoji-picker span { font-size: 1.5rem; cursor: pointer; text-align: center; transition: transform 0.2s; }
 .emoji-picker span:hover { transform: scale(1.2); }
-.send-btn { background-color: var(--msg-out); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; }
+.send-btn { background-color: var(--msg-out); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; font-size: 1.5rem; }
 .send-btn:disabled { background-color: var(--bg-input); color: var(--text-muted); cursor: not-allowed; }
 .send-btn svg { width: 22px; height: 22px; fill: currentColor; margin-right: 2px; }
 
-.loading-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background-color: var(--bg-main); color: var(--text-main); font-family: 'Vazirmatn', Tahoma, sans-serif; }
-
-/* --- استایل‌های مودال (پنجره) حذف چت --- */
-.modal-overlay {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+/* استایل‌های ضبط صدا */
+.recording-ui {
   display: flex;
-  justify-content: center;
   align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(3px);
+  width: 100%;
+  background-color: rgba(255, 77, 77, 0.1);
+  padding: 10px 15px;
+  border-radius: 25px;
+  gap: 15px;
 }
 
-.modal-content {
-  background-color: var(--bg-panel);
-  padding: 20px;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 350px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  text-align: center;
-  border: 1px solid var(--border-color);
+.recording-dot {
+  width: 12px;
+  height: 12px;
+  background-color: #ff4d4d;
+  border-radius: 50%;
+  animation: pulse 1s infinite;
 }
 
-.modal-content h3 {
-  margin-bottom: 10px;
-  color: var(--text-main);
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
 }
 
-.modal-content p {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  margin-bottom: 20px;
-  line-height: 1.5;
+.recording-text {
+  color: #ff4d4d;
+  font-weight: bold;
+  flex: 1;
 }
 
-.modal-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.modal-actions button {
-  padding: 12px;
+.stop-record-btn {
+  background-color: #ff4d4d;
+  color: white;
   border: none;
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 0.95rem;
+  padding: 8px 15px;
+  border-radius: 20px;
   cursor: pointer;
-  transition: 0.2s;
+  font-family: inherit;
   font-weight: bold;
 }
 
-.btn-me {
-  background-color: var(--bg-input);
-  color: var(--text-main);
-  border: 1px solid var(--border-color) !important;
-}
-
-.btn-me:hover { background-color: var(--border-color); }
-
-.btn-both {
-  background-color: #ff4d4d;
-  color: white;
-}
-
-.btn-both:hover { background-color: #d32f2f; }
-
-.btn-cancel {
+.cancel-record-btn {
   background: none;
+  border: none;
   color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  font-weight: bold;
 }
 
+.mic-btn {
+  background-color: var(--accent-color);
+}
+
+.loading-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background-color: var(--bg-main); color: var(--text-main); font-family: 'Vazirmatn', Tahoma, sans-serif; }
+
+/* مودال حذف */
+.modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(3px); }
+.modal-content { background-color: var(--bg-panel); padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; border: 1px solid var(--border-color); }
+.modal-content h3 { margin-bottom: 10px; color: var(--text-main); }
+.modal-content p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+.modal-actions { display: flex; flex-direction: column; gap: 10px; }
+.modal-actions button { padding: 12px; border: none; border-radius: 8px; font-family: inherit; font-size: 0.95rem; cursor: pointer; transition: 0.2s; font-weight: bold; }
+.btn-me { background-color: var(--bg-input); color: var(--text-main); border: 1px solid var(--border-color) !important; }
+.btn-me:hover { background-color: var(--border-color); }
+.btn-both { background-color: #ff4d4d; color: white; }
+.btn-both:hover { background-color: #d32f2f; }
+.btn-cancel { background: none; color: var(--text-muted); }
 .btn-cancel:hover { color: var(--text-main); }
