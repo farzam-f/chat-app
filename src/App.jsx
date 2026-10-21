@@ -8,11 +8,11 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [userCode, setUserCode] = useState('');
   const [userName, setUserName] = useState('');
-  const [isEditingName, setIsEditingName] = useState(false);
+  const [userAvatar, setUserAvatar] = useState(''); // استیت جدید برای عکس پروفایل
   
-  // استیت‌های مربوط به چت
+  const [isEditingName, setIsEditingName] = useState(false);
   const [chatList, setChatList] = useState([]);
-  const [isSearching, setIsSearching] = useState(false); // آیا باکس جستجو باز است؟
+  const [isSearching, setIsSearching] = useState(false);
   const [targetCode, setTargetCode] = useState('');
   const [chatUser, setChatUser] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -20,7 +20,8 @@ function App() {
   const [chatId, setChatId] = useState(null);
   const [uploading, setUploading] = useState(false);
   
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef(null); // برای عکس‌های چت
+  const avatarInputRef = useRef(null); // برای عکس پروفایل
 
   // ۱. لاگین ناشناس
   useEffect(() => {
@@ -48,12 +49,12 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد و اسم
+  // ۲. تنظیم کد و اسم و عکس
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
         let localCode = localStorage.getItem('myChatCode');
-        const { data, error } = await supabase.from('profiles').select('code, username').eq('id', user.id).maybeSingle();
+        const { data, error } = await supabase.from('profiles').select('code, username, avatar_url').eq('id', user.id).maybeSingle();
         
         if (error) return console.error(error);
 
@@ -74,6 +75,7 @@ function App() {
         } else {
           setUserCode(data.code);
           setUserName(data.username || '');
+          setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
         }
       }
@@ -81,11 +83,10 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۳. گرفتن لیست چت‌ها
+  // گرفتن لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     
-    // گرفتن تمام پیام‌هایی که کاربر فرستاده یا دریافت کرده
     const { data: msgs, error } = await supabase
       .from('messages')
       .select('chat_id, content, image_url, created_at')
@@ -94,12 +95,9 @@ function App() {
 
     if (error || !msgs) return;
 
-    // پیدا کردن چت‌های یکتا و آخرین پیام هر چت
     const uniqueChats = {};
     msgs.forEach(msg => {
-      if (!uniqueChats[msg.chat_id]) {
-        uniqueChats[msg.chat_id] = msg; // چون مرتب شده، اولین پیام آخرین پیام است
-      }
+      if (!uniqueChats[msg.chat_id]) uniqueChats[msg.chat_id] = msg;
     });
 
     const chatIds = Object.keys(uniqueChats);
@@ -108,13 +106,9 @@ function App() {
       return;
     }
 
-    // پیدا کردن آیدی طرف مقابل از اسم چت
     const otherUids = chatIds.map(id => id.split('_').find(uid => uid !== user.id));
+    const { data: profiles } = await supabase.from('profiles').select('id, code, username, avatar_url').in('id', otherUids);
 
-    // گرفتن پروفایل طرف مقابل‌ها
-    const { data: profiles } = await supabase.from('profiles').select('id, code, username').in('id', otherUids);
-
-    // ساختن لیست نهایی
     const finalList = chatIds.map(chatId => {
       const otherUid = chatId.split('_').find(uid => uid !== user.id);
       const profile = profiles?.find(p => p.id === otherUid);
@@ -125,6 +119,7 @@ function App() {
         otherUid,
         name: profile?.username || `کاربر ${profile?.code || ''}`,
         code: profile?.code,
+        avatarUrl: profile?.avatar_url,
         lastMessage: lastMsg.image_url ? '📷 عکس' : lastMsg.content,
         lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
       };
@@ -133,11 +128,8 @@ function App() {
     setChatList(finalList);
   };
 
-  // وقتی کاربر لاگین کرد یا از چت خارج شد، لیست رو آپدیت کن
   useEffect(() => {
-    if (user && !chatId) {
-      fetchChatList();
-    }
+    if (user && !chatId) fetchChatList();
   }, [user, chatId]);
 
   // ذخیره نام
@@ -145,7 +137,44 @@ function App() {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
     setIsEditingName(false);
-    fetchChatList(); // آپدیت لیست برای اینکه اسم جدید تو چت‌ها هم دیده بشه
+    fetchChatList();
+  };
+
+  // ۳. آپلود عکس پروفایل
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+    try {
+      // فشرده‌سازی شدید برای عکس پروفایل (چون کوچیک نمایش داده میشه)
+      const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
+      const compressedFile = await imageCompression(file, options);
+      
+      const filePath = `avatars/${user.id}.webp`;
+
+      // آپلود به استوریج (با آپشن upsert: true تا بتونه عکس قبلی رو جایگزین کنه)
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, compressedFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+
+      // ذخیره در دیتابیس
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      
+      setUserAvatar(publicUrl);
+      fetchChatList(); // آپدیت لیست چت‌ها
+
+    } catch (error) {
+      console.error('خطا در آپلود آواتار:', error);
+      alert('خطا در آپلود عکس پروفایل!');
+    } finally {
+      setUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
   };
 
   // جستجوی کاربر جدید
@@ -154,21 +183,20 @@ function App() {
     const code = targetCode.trim().toUpperCase();
     if (code === userCode) return alert('این کد خودتان است!');
     
-    const { data } = await supabase.from('profiles').select('id, code, username').eq('code', code).maybeSingle();
+    const { data } = await supabase.from('profiles').select('id, code, username, avatar_url').eq('code', code).maybeSingle();
     
     if (data) {
-      openChat(data.id, data.code, data.username);
+      openChat(data.id, data.code, data.username, data.avatar_url);
     } else {
       alert('کاربری با این کد پیدا نشد.');
     }
   };
 
-  // باز کردن یک چت
-  const openChat = (otherUid, otherCode, otherName) => {
+  const openChat = (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
-    setChatUser({ uid: otherUid, code: otherCode, name: otherName });
+    setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
     setChatId(newChatId);
-    setIsSearching(false); // بستن باکس جستجو
+    setIsSearching(false);
     setTargetCode('');
   };
 
@@ -195,33 +223,23 @@ function App() {
     return () => supabase.removeChannel(channel);
   }, [chatId]);
 
-  // ارسال پیام متنی
+  // ارسال پیام
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
     const msgText = newMessage;
     setNewMessage('');
-
-    await supabase.from('messages').insert({
-      chat_id: chatId,
-      sender_id: user.id,
-      content: msgText,
-    });
+    await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: msgText });
   };
 
-  // آپلود عکس با فشرده‌سازی
+  // آپلود عکس چت
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
 
     setUploading(true);
     try {
-      const options = {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 1280,
-        useWebWorker: true,
-        fileType: 'image/webp',
-      };
+      const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
       const fileExt = compressedFile.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
@@ -231,13 +249,7 @@ function App() {
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-
-      await supabase.from('messages').insert({
-        chat_id: chatId,
-        sender_id: user.id,
-        content: '',
-        image_url: publicUrl,
-      });
+      await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl });
 
     } catch (error) {
       console.error('خطا در آپلود عکس:', error);
@@ -248,7 +260,6 @@ function App() {
     }
   };
 
-  // حذف پیام
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
@@ -273,29 +284,32 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* هدر بالا */}
       <header className="header">
         <div className="profile-section">
+          {/* آواتار کاربر */}
+          <div className="my-avatar" onClick={() => avatarInputRef.current.click()} title="برای تغییر عکس کلیک کنید">
+            {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
+          </div>
+          <input type="file" accept="image/*" ref={avatarInputRef} onChange={handleAvatarUpload} style={{ display: 'none' }} />
+
           {isEditingName ? (
             <div className="edit-name-box">
               <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="اسم شما..." maxLength={15} />
               <button onClick={saveName}>ذخیره</button>
             </div>
           ) : (
-            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer' }} title="برای تغییر اسم کلیک کنید">
+            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }} title="برای تغییر اسم کلیک کنید">
               {userName ? userName : 'پیام‌رسان ✎'}
             </h2>
           )}
         </div>
-        <div className="user-code-badge" onClick={copyCode} title="برای کپی کلیک کنید">
+        <div className="user-code-badge" onClick={copyCode}>
           {userCode || '...'}
         </div>
       </header>
 
-      {/* بدنه اصلی */}
       {!chatUser ? (
         <div className="main-list-area">
-          {/* هدر لیست چت‌ها */}
           <div className="list-header">
             <h3>چت‌ها</h3>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
@@ -303,7 +317,6 @@ function App() {
             </button>
           </div>
 
-          {/* باکس جستجو (فقط وقتی دکمه چت جدید زده میشه) */}
           {isSearching && (
             <div className="search-area">
               <form className="search-box" onSubmit={handleSearch}>
@@ -313,14 +326,15 @@ function App() {
             </div>
           )}
 
-          {/* لیست چت‌ها */}
           <div className="chat-list">
             {chatList.length === 0 ? (
               <div className="empty-list">هنوز چتی ندارید. با دکمه بالا یکی شروع کنید!</div>
             ) : (
               chatList.map(chat => (
-                <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name)}>
-                  <div className="avatar">{chat.name.charAt(0)}</div>
+                <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
+                  <div className="avatar">
+                    {chat.avatarUrl ? <img src={chat.avatarUrl} alt="avatar" /> : chat.name.charAt(0)}
+                  </div>
                   <div className="chat-info">
                     <div className="chat-name-time">
                       <span className="chat-name">{chat.name}</span>
@@ -334,11 +348,12 @@ function App() {
           </div>
         </div>
       ) : (
-        /* صفحه داخل چت */
         <div className="chat-container">
           <div className="chat-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div className="avatar-small">{chatUser.name ? chatUser.name.charAt(0) : '?'}</div>
+              <div className="avatar-small">
+                {chatUser.avatarUrl ? <img src={chatUser.avatarUrl} alt="avatar" /> : (chatUser.name ? chatUser.name.charAt(0) : '?')}
+              </div>
               <h3>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
             </div>
             <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>
