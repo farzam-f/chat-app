@@ -46,7 +46,6 @@ function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
@@ -111,14 +110,33 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. دریافت لیست چت‌ها
+  // ۴. دریافت لیست چت‌ها + شمارش پیام‌های خونده نشده
   const fetchChatList = async () => {
     if (!user) return;
-    const { data: msgs, error } = await supabase.from('messages').select('chat_id, content, image_url, created_at').like('chat_id', `%${user.id}%`).order('created_at', { ascending: false });
+    
+    // گرفتن همه پیام‌ها (برای پیدا کردن آخرین پیام و تعداد خونده نشده‌ها)
+    const { data: msgs, error } = await supabase
+      .from('messages')
+      .select('chat_id, content, image_url, created_at, sender_id, is_read')
+      .like('chat_id', `%${user.id}%`)
+      .order('created_at', { ascending: false });
+
     if (error || !msgs) return;
 
     const uniqueChats = {};
-    msgs.forEach(msg => { if (!uniqueChats[msg.chat_id]) uniqueChats[msg.chat_id] = msg; });
+    const unreadCounts = {};
+
+    msgs.forEach(msg => {
+      // پیدا کردن آخرین پیام
+      if (!uniqueChats[msg.chat_id]) {
+        uniqueChats[msg.chat_id] = msg;
+      }
+      // شمارش پیام‌های خونده نشده (پیام‌هایی که فرستنده من نیستم و خونده نشدن)
+      if (msg.sender_id !== user.id && !msg.is_read) {
+        unreadCounts[msg.chat_id] = (unreadCounts[msg.chat_id] || 0) + 1;
+      }
+    });
+
     const chatIds = Object.keys(uniqueChats);
     if (chatIds.length === 0) return setChatList([]);
 
@@ -133,13 +151,29 @@ function App() {
         chatId, otherUid, name: profile?.username || `کاربر ${profile?.code || ''}`,
         code: profile?.code, avatarUrl: profile?.avatar_url,
         lastMessage: lastMsg.image_url ? '📷 عکس' : lastMsg.content,
-        lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
+        lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        unreadCount: unreadCounts[chatId] || 0
       };
     });
     setChatList(finalList);
   };
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
+
+  // شنونده زنده برای پیام‌های جدید وقتی در صفحه اصلی هستیم
+  useEffect(() => {
+    if (!user) return;
+    const globalChannel = supabase.channel('global-chats')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const newMsg = payload.new;
+        // اگر پیام از طرف مقابل بود و ما داخل اون چت نبودیم، لیست رو آپدیت کن
+        if (newMsg.sender_id !== user.id && newMsg.chat_id !== chatId) {
+          fetchChatList();
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(globalChannel); };
+  }, [user, chatId]);
 
   const saveName = async () => {
     if (!userName.trim()) return;
@@ -174,17 +208,25 @@ function App() {
     else alert('کاربری با این کد پیدا نشد.');
   };
 
-  // باز کردن چت و چک کردن اولیه مسدودیت
+  // باز کردن چت + خواندن پیام‌ها
   const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
     setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
 
+    // علامت زدن پیام‌های طرف مقابل به عنوان خوانده شده
+    await supabase.from('messages')
+      .update({ is_read: true })
+      .eq('chat_id', newChatId)
+      .neq('sender_id', user.id)
+      .eq('is_read', false);
+
+    // آپدیت لیست چت‌ها برای صفر شدن بج
+    setChatList(prev => prev.map(c => c.chatId === newChatId ? { ...c, unreadCount: 0 } : c));
     await checkBlockStatus(otherUid);
   };
 
-  // تابع چک کردن وضعیت بلاک
   const checkBlockStatus = async (otherUid) => {
     const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).single();
@@ -192,33 +234,22 @@ function App() {
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
 
-  // شنونده زنده برای تغییرات بلاک
   useEffect(() => {
     if (!chatUser) return;
     const profileChannel = supabase.channel(`profile-blocks-${chatUser.uid}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-        if (payload.new.id === user.id) {
-          setIsBlockedByMe(payload.new.blocked_ids?.includes(chatUser.uid) || false);
-        }
-        if (payload.new.id === chatUser.uid) {
-          setHasBlockedMe(payload.new.blocked_ids?.includes(user.id) || false);
-        }
+        if (payload.new.id === user.id) setIsBlockedByMe(payload.new.blocked_ids?.includes(chatUser.uid) || false);
+        if (payload.new.id === chatUser.uid) setHasBlockedMe(payload.new.blocked_ids?.includes(user.id) || false);
       })
       .subscribe();
     return () => supabase.removeChannel(profileChannel);
   }, [chatUser, user]);
 
-  // مسدود / رفع مسدودیت
   const toggleBlock = async () => {
     const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
     let blocked = myProfile?.blocked_ids || [];
-
-    if (isBlockedByMe) {
-      blocked = blocked.filter(id => id !== chatUser.uid);
-    } else {
-      blocked.push(chatUser.uid);
-    }
-
+    if (isBlockedByMe) { blocked = blocked.filter(id => id !== chatUser.uid); } 
+    else { blocked.push(chatUser.uid); }
     await supabase.from('profiles').update({ blocked_ids: blocked }).eq('id', user.id);
     setIsBlockedByMe(!isBlockedByMe);
   };
@@ -270,25 +301,20 @@ function App() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
-
-    // چک نهایی قبل از ارسال
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', chatUser.uid).single();
     if (otherProfile?.blocked_ids?.includes(user.id) || isBlockedByMe) {
       alert('امکان ارسال پیام وجود ندارد (مسدودیت)');
       return;
     }
-
     const msgText = newMessage;
     setNewMessage('');
-    
     if (editingMessage) {
       await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
       setEditingMessage(null);
     } else {
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: msgText,
-        reply_to_id: replyingTo ? replyingTo.id : null,
-        reactions: {}
+        reply_to_id: replyingTo ? replyingTo.id : null, reactions: {}
       });
       setReplyingTo(null);
     }
@@ -297,14 +323,11 @@ function App() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId || isBlockedByMe || hasBlockedMe) return;
-
-    // چک نهایی قبل از ارسال
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', chatUser.uid).single();
     if (otherProfile?.blocked_ids?.includes(user.id) || isBlockedByMe) {
       alert('امکان ارسال پیام وجود ندارد (مسدودیت)');
       return;
     }
-
     setUploading(true);
     try {
       const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
@@ -313,11 +336,9 @@ function App() {
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl,
-        reply_to_id: replyingTo ? replyingTo.id : null,
-        reactions: {}
+        reply_to_id: replyingTo ? replyingTo.id : null, reactions: {}
       });
       setReplyingTo(null);
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
@@ -327,7 +348,6 @@ function App() {
     const msg = messages.find(m => m.id === msgId);
     if (!msg) return;
     let newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
-    
     if (newReactions[emoji] && newReactions[emoji].includes(user.id)) {
       newReactions[emoji] = newReactions[emoji].filter(id => id !== user.id);
       if (newReactions[emoji].length === 0) delete newReactions[emoji];
@@ -422,7 +442,13 @@ function App() {
                         <span className="chat-name">{chat.name}</span>
                         <span className="chat-time">{chat.lastTime}</span>
                       </div>
-                      <div className="chat-last-msg">{chat.lastMessage}</div>
+                      <div className="chat-last-msg-row">
+                        <div className="chat-last-msg">{chat.lastMessage}</div>
+                        {/* نشانگر پیام خونده نشده */}
+                        {chat.unreadCount > 0 && (
+                          <div className="unread-badge">{chat.unreadCount}</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

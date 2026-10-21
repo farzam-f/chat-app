@@ -1,5 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
 
+/* ۱. متغیرهای رنگی برای تم تاریک (پیش‌فرض) */
 :root {
   --bg-main: #0e1621;
   --bg-panel: #17212b;
@@ -11,8 +12,10 @@
   --msg-out: #2b5278;
   --msg-in: #182533;
   --msg-time: #7f91a4;
+  --unread-bg: #5eb5f7; /* رنگ نشانگر پیام خوانده نشده */
 }
 
+/* ۲. متغیرهای رنگی برای تم روشن */
 [data-theme="light"] {
   --bg-main: #e5e5e5;
   --bg-panel: #ffffff;
@@ -24,13 +27,15 @@
   --msg-out: #dcf8c6;
   --msg-in: #ffffff;
   --msg-time: #999999;
+  --unread-bg: #007bff;
 }
 
+/* ۳. تنظیمات پایه */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-color: var(--bg-main); color: var(--text-main); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.3s, color 0.3s; }
 .app-container { display: flex; flex-direction: column; height: 100vh; height: 100dvh; width: 100%; max-width: 800px; margin: 0 auto; background-color: var(--bg-panel); box-shadow: 0 0 20px rgba(0,0,0,0.2); transition: background-color 0.3s; }
 
-/* هدر */
+/* ۴. هدر بالای سایت */
 .header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; z-index: 10; transition: background-color 0.3s; }
 .profile-section { display: flex; align-items: center; }
 .header h2 { font-size: 1.1rem; color: var(--text-main); cursor: pointer; transition: color 0.2s; margin-right: 12px; }
@@ -39,18 +44,19 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .edit-name-box { display: flex; gap: 8px; align-items: center; }
 .edit-name-box input { background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 12px; border-radius: 8px; font-family: inherit; outline: none; width: 130px; font-size: 0.9rem; }
 .edit-name-box button { background: var(--accent-color); color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.9rem; }
-.user-code-badge { background-color: var(--bg-input); color: var(--text-main); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; letter-spacing: 1px; cursor: pointer; }
+.user-code-badge { background-color: var(--bg-input); color: var(--text-main); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s; }
 .theme-toggle-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; padding: 5px; transition: 0.2s; }
 
-/* لیست چت‌ها */
+/* ۵. صفحه لیست چت‌ها */
 .main-list-area { display: flex; flex-direction: column; flex: 1; min-height: 0; background-color: var(--bg-main); transition: background-color 0.3s; }
 .list-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); }
 .list-header h3 { font-size: 1.1rem; color: var(--text-main); }
-.new-chat-btn { background-color: var(--msg-out); color: var(--text-main); border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.9rem; }
+.new-chat-btn { background-color: var(--msg-out); color: var(--text-main); border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.9rem; transition: 0.2s; }
 .search-area { padding: 15px 20px; background-color: var(--bg-panel); }
 .search-box { display: flex; background-color: var(--bg-input); border-radius: 10px; padding: 5px; }
 .search-box input { flex: 1; background: transparent; border: none; color: var(--text-main); padding: 10px; font-family: inherit; outline: none; }
 .search-box button { background-color: var(--msg-out); color: var(--text-main); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; }
+
 .chat-list { flex: 1; overflow-y: auto; min-height: 0; }
 .empty-list { text-align: center; color: var(--text-muted); padding: 50px 20px; }
 .chat-list-item { display: flex; align-items: center; padding: 12px 20px; cursor: pointer; transition: background 0.2s; border-bottom: 1px solid var(--border-color); }
@@ -59,13 +65,17 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .avatar { width: 50px; height: 50px; border-radius: 50%; background-color: var(--msg-out); color: var(--text-main); display: flex; justify-content: center; align-items: center; font-size: 1.2rem; font-weight: bold; overflow: hidden; flex-shrink: 0; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .online-dot-list { position: absolute; bottom: 0; right: 2px; width: 14px; height: 14px; background-color: #4caf50; border: 2px solid var(--bg-panel); border-radius: 50%; }
-.chat-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.chat-info { flex: 1; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
 .chat-name-time { display: flex; justify-content: space-between; align-items: center; }
 .chat-name { font-weight: bold; color: var(--text-main); font-size: 1rem; }
 .chat-time { font-size: 0.75rem; color: var(--text-muted); }
-.chat-last-msg { color: var(--text-muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
 
-/* صفحه چت */
+/* نشانگر پیام خوانده نشده */
+.chat-last-msg-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.chat-last-msg { color: var(--text-muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.unread-badge { background-color: var(--unread-bg); color: #fff; font-size: 0.75rem; font-weight: bold; min-width: 20px; height: 20px; border-radius: 10px; display: flex; justify-content: center; align-items: center; padding: 0 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+/* ۶. صفحه داخل چت */
 .chat-container { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .chat-header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); flex-shrink: 0; transition: background-color 0.3s; }
 .chat-header h3 { font-size: 1rem; color: var(--text-main); }
@@ -75,14 +85,14 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .online-text { color: #4caf50; font-weight: bold; }
 .offline-text { color: var(--text-muted); }
 .typing-text { color: var(--accent-color); font-style: italic; font-weight: bold; }
-.back-btn { background: none; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.95rem; font-family: inherit; }
+.back-btn { background: none; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.95rem; font-family: inherit; transition: 0.2s; }
 .block-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; opacity: 0.7; transition: 0.2s; }
 .block-btn:hover { opacity: 1; transform: scale(1.1); }
 
-/* پیام سیستمی */
+/* پیام سیستمی مسدودیت */
 .system-message { text-align: center; font-size: 0.85rem; padding: 10px; background-color: rgba(255, 77, 77, 0.1); color: #ff4d4d; border-bottom: 1px solid var(--border-color); }
 
-/* پیام‌ها */
+/* ۷. ناحیه پیام‌ها */
 .messages-area { flex: 1; min-height: 0; padding: 20px; overflow-y: auto; background-color: var(--bg-main); background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png'); background-size: cover; display: flex; flex-direction: column; gap: 12px; transition: background-color 0.3s; }
 .message-wrapper { display: flex; flex-direction: column; max-width: 80%; position: relative; }
 .message-wrapper.outgoing { align-self: flex-end; align-items: flex-end; }
@@ -94,7 +104,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .message-meta { display: flex; justify-content: flex-end; margin-top: 4px; }
 .edited-tag { font-size: 0.65rem; color: var(--msg-time); }
 
-/* ری‌اکشن‌ها */
+/* ۸. ری‌اکشن‌ها */
 .reactions-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -8px; margin-bottom: 4px; z-index: 5; }
 .reaction-badge { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 3px; color: var(--text-main); }
 .reaction-picker { position: absolute; bottom: 30px; background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 10px; display: flex; gap: 8px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
@@ -102,16 +112,16 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .picker-left { left: 0; }
 .picker-right { right: 0; }
 
-/* اطلاعات پیام */
+/* ۹. اطلاعات پیام */
 .message-info { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; width: 100%; padding: 0 5px; }
 .message-wrapper.outgoing .message-info { flex-direction: row-reverse; }
 .message-wrapper.incoming .message-info { flex-direction: row; }
 .message-time { font-size: 0.7rem; color: var(--msg-time); }
 .message-actions { display: flex; gap: 8px; align-items: center; }
-.action-btn { font-size: 0.8rem; cursor: pointer; opacity: 0.5; }
+.action-btn { font-size: 0.8rem; cursor: pointer; opacity: 0.5; transition: 0.2s; }
 .action-btn:hover { opacity: 1; transform: scale(1.2); }
 
-/* نقل قول و باکس ارسال */
+/* ۱۰. نقل قول و باکس ارسال */
 .quoted-message { background-color: rgba(0, 0, 0, 0.1); border-right: 3px solid var(--accent-color); padding: 5px 10px; border-radius: 5px; margin-bottom: 8px; font-size: 0.8rem; cursor: pointer; }
 .quoted-name { color: var(--accent-color); font-weight: bold; margin-bottom: 2px; }
 .quoted-text { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -124,11 +134,12 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); position: relative; transition: background-color 0.3s; }
 .input-area input[type="text"] { flex: 1; background-color: var(--bg-input); border: none; padding: 14px 20px; border-radius: 25px; color: var(--text-main); font-family: inherit; font-size: 1rem; outline: none; min-width: 0; }
 .input-area input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
-.attach-btn, .emoji-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); padding: 0 5px; }
+.attach-btn, .emoji-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); padding: 0 5px; transition: 0.2s; }
 .attach-btn:disabled, .emoji-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .emoji-picker { position: absolute; bottom: 50px; right: 0; background-color: var(--bg-panel); border-radius: 10px; padding: 10px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); width: 200px; border: 1px solid var(--border-color); }
-.emoji-picker span { font-size: 1.5rem; cursor: pointer; text-align: center; }
-.send-btn { background-color: var(--msg-out); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; }
+.emoji-picker span { font-size: 1.5rem; cursor: pointer; text-align: center; transition: transform 0.2s; }
+.emoji-picker span:hover { transform: scale(1.2); }
+.send-btn { background-color: var(--msg-out); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; }
 .send-btn:disabled { background-color: var(--bg-input); color: var(--text-muted); cursor: not-allowed; }
 .send-btn svg { width: 22px; height: 22px; fill: currentColor; margin-right: 2px; }
 
