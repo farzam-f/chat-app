@@ -20,14 +20,13 @@ function App() {
   const [chatId, setChatId] = useState(null);
   const [uploading, setUploading] = useState(false);
 
-  // استیت‌های جدید برای آنلاین بودن و تایپ کردن
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
-  const chatChannelRef = useRef(null); // برای نگه داشتن کانال چت
-  const typingTimeoutRef = useRef(null); // برای پاک کردن متن تایپ بعد از چند ثانیه
+  const chatChannelRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   // ۱. لاگین ناشناس
   useEffect(() => {
@@ -55,11 +54,10 @@ function App() {
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState();
-        setOnlineUsers(Object.keys(state)); // آیدی همه کسانی که آنلاین هستن
+        setOnlineUsers(Object.keys(state));
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // به بقیه اعلام کن که من آنلاینم
           await presenceChannel.track({ online_at: new Date().toISOString() });
         }
       });
@@ -79,7 +77,6 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // تنظیم کد و اسم و عکس
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -113,7 +110,6 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // گرفتن لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase.from('messages').select('chat_id, content, image_url, created_at').like('chat_id', `%${user.id}%`).order('created_at', { ascending: false });
@@ -152,7 +148,6 @@ function App() {
     fetchChatList();
   };
 
-  // آپلود عکس پروفایل
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -170,7 +165,6 @@ function App() {
     } catch (error) { alert('خطا در آپلود عکس پروفایل!'); } finally { setUploading(false); }
   };
 
-  // جستجوی کاربر
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
@@ -201,20 +195,18 @@ function App() {
 
     const channel = supabase
       .channel(`chat-room-${chatId}`)
-      // پیام‌های جدید
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
       })
-      // حذف پیام
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
-      // گوش دادن به تایپ کردن طرف مقابل
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        if (payload.user_id !== user.id) {
+        // ✅ استفاده از user?.id برای جلوگیری از خطا وقتی user هنوز لود نشده
+        if (payload.user_id !== user?.id) { 
           setIsOtherTyping(true);
           clearTimeout(typingTimeoutRef.current);
-          typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 2500); // بعد از ۲.۵ ثانیه پاک میشه
+          typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 2500);
         }
       })
       .subscribe();
@@ -225,9 +217,9 @@ function App() {
       supabase.removeChannel(channel);
       setIsOtherTyping(false);
     };
-  }, [chatId, user.id]);
+  // ✅ تغییر dependency array از user.id به user
+  }, [chatId, user]); 
 
-  // ارسال سیگنال تایپ کردن
   const handleTyping = (e) => {
     setNewMessage(e.target.value);
     if (e.target.value.length > 0 && chatChannelRef.current) {
@@ -284,7 +276,6 @@ function App() {
   if (loading) return <div className="loading-screen">در حال اتصال...</div>;
   if (!user) return <div className="loading-screen">در حال ساخت حساب...</div>;
 
-  // چک کردن اینکه طرف مقابل آنلاین هست یا نه
   const isOtherOnline = chatUser ? onlineUsers.includes(chatUser.uid) : false;
 
   return (
@@ -333,7 +324,6 @@ function App() {
               <div className="empty-list">هنوز چتی ندارید.</div>
             ) : (
               chatList.map(chat => {
-                // آواتار و آنلاین بودن توی لیست چت‌ها
                 const isOnlineInList = onlineUsers.includes(chat.otherUid);
                 return (
                   <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
@@ -365,7 +355,6 @@ function App() {
               </div>
               <div>
                 <h3 style={{ margin: 0 }}>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
-                {/* نشانگر آنلاین یا در حال تایپ */}
                 <div className="status-text">
                   {isOtherTyping ? (
                     <span className="typing-text">در حال تایپ...</span>
@@ -408,7 +397,7 @@ function App() {
               type="text"
               placeholder="پیام..." 
               value={newMessage} 
-              onChange={handleTyping} // تابع تغییر کرد تا سیگنال تایپ بفرسته
+              onChange={handleTyping}
             />
             <button type="submit" className="send-btn">
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
