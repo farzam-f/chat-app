@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import imageCompression from 'browser-image-compression'; // ایمپورت کتابخانه
 import './App.css';
 
 function App() {
@@ -17,7 +18,7 @@ function App() {
   
   const fileInputRef = useRef(null);
 
-  // ۱. لاگین ناشناس
+  // ... (بقیه کدهای مربوط به لاگین، تنظیم پروفایل، جستجو، دریافت پیام و ارسال پیام بدون تغییر باقی می‌مانند)
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -32,7 +33,6 @@ function App() {
     checkUser();
   }, []);
 
-  // تولید کد اختصاصی
   const generateUniqueCode = async () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -43,15 +43,12 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد و اسم
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
         let localCode = localStorage.getItem('myChatCode');
         const { data, error } = await supabase.from('profiles').select('code, username').eq('id', user.id).maybeSingle();
-        
         if (error) return console.error(error);
-
         if (!data) {
           if (!localCode) {
             localCode = await generateUniqueCode();
@@ -76,21 +73,17 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ذخیره نام
   const saveName = async () => {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
     setIsEditingName(false);
   };
 
-  // جستجوی کاربر
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
     if (code === userCode) return alert('این کد خودتان است!');
-    
     const { data } = await supabase.from('profiles').select('id, code, username').eq('code', code).maybeSingle();
-    
     if (data) {
       const newChatId = [user.id, data.id].sort().join('_');
       setChatUser({ uid: data.id, code: data.code, name: data.username });
@@ -100,16 +93,13 @@ function App() {
     }
   };
 
-  // ۳. دریافت پیام‌ها (Real-time)
   useEffect(() => {
     if (!chatId) return;
-
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
       if (data) setMessages(data);
     };
     fetchMessages();
-
     const channel = supabase
       .channel('chat-room')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
@@ -119,17 +109,14 @@ function App() {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
       .subscribe();
-
     return () => supabase.removeChannel(channel);
   }, [chatId]);
 
-  // ارسال پیام متنی
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
     const msgText = newMessage;
     setNewMessage('');
-
     await supabase.from('messages').insert({
       chat_id: chatId,
       sender_id: user.id,
@@ -137,55 +124,63 @@ function App() {
     });
   };
 
-  // ۴. آپلود عکس
+  // ✅ تابع آپلود عکس با فشرده‌سازی
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
 
     setUploading(true);
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
-    const filePath = `${chatId}/${fileName}`;
+    
+    try {
+      // تنظیمات فشرده‌سازی
+      const options = {
+        maxSizeMB: 0.5, // حداکثر حجم خروجی 500 کیلوبایت
+        maxWidthOrHeight: 1280, // حداکثر ابعاد 1280 پیکسل
+        useWebWorker: true, // استفاده از Web Worker برای جلوگیری از فریز شدن صفحه
+        fileType: 'image/webp', // تبدیل به فرمت WebP برای حجم کمتر
+      };
 
-    // آپلود به Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('chat-images')
-      .upload(filePath, file);
+      // فشرده‌سازی عکس
+      const compressedFile = await imageCompression(file, options);
 
-    if (uploadError) {
+      // آپلود نسخه فشرده شده به Supabase
+      const fileExt = compressedFile.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+      const filePath = `${chatId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, compressedFile);
+
+      if (uploadError) throw uploadError;
+
+      // گرفتن لینک عمومی عکس
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath);
+
+      // ذخیره لینک عکس در دیتابیس
+      await supabase.from('messages').insert({
+        chat_id: chatId,
+        sender_id: user.id,
+        content: '',
+        image_url: publicUrl,
+      });
+
+    } catch (error) {
+      console.error('خطا در آپلود عکس:', error);
       alert('خطا در آپلود عکس!');
-      console.error(uploadError);
+    } finally {
       setUploading(false);
-      return;
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-
-    // گرفتن لینک عکس
-    const { data: { publicUrl } } = supabase.storage
-      .from('chat-images')
-      .getPublicUrl(filePath);
-
-    // ذخیره لینک عکس توی دیتابیس
-    await supabase.from('messages').insert({
-      chat_id: chatId,
-      sender_id: user.id,
-      content: '',
-      image_url: publicUrl,
-    });
-
-    setUploading(false);
-    // ریست کردن اینپوت فایل
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // حذف پیام
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
-      if (error) {
-        alert('خطا در حذف پیام!');
-      } else {
-        setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
-      }
+      if (error) alert('خطا در حذف پیام!');
+      else setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
     }
   };
 
@@ -209,13 +204,7 @@ function App() {
         <div className="profile-section">
           {isEditingName ? (
             <div className="edit-name-box">
-              <input 
-                type="text" 
-                value={userName} 
-                onChange={(e) => setUserName(e.target.value)} 
-                placeholder="اسم شما..."
-                maxLength={15}
-              />
+              <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="اسم شما..." maxLength={15} />
               <button onClick={saveName}>ذخیره</button>
             </div>
           ) : (
@@ -234,12 +223,7 @@ function App() {
           <div style={{ fontSize: '3rem', marginBottom: '20px' }}>💬</div>
           <h3>کد اختصاصی دوستتان را وارد کنید</h3>
           <form className="search-box" onSubmit={handleSearch}>
-            <input 
-              placeholder="مثلاً: A3B4C5" 
-              value={targetCode} 
-              onChange={(e) => setTargetCode(e.target.value)} 
-              maxLength={6}
-            />
+            <input placeholder="مثلاً: A3B4C5" value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
             <button type="submit">جستجو</button>
           </form>
         </div>
@@ -247,9 +231,7 @@ function App() {
         <div className="chat-container">
           <div className="chat-header">
             <h3>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
-            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>
-              بستن ✕
-            </button>
+            <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>بستن ✕</button>
           </div>
 
           <div className="messages-area">
@@ -257,23 +239,12 @@ function App() {
               const isMe = msg.sender_id === user.id;
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
-                  
-                  {/* نمایش عکس یا متن */}
                   <div className="message-bubble">
-                    {msg.image_url ? (
-                      <img src={msg.image_url} alt="sent" className="chat-image" />
-                    ) : (
-                      msg.content
-                    )}
+                    {msg.image_url ? <img src={msg.image_url} alt="sent" className="chat-image" /> : msg.content}
                   </div>
-
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
-                    {isMe && (
-                      <span className="delete-btn" onClick={() => deleteMessage(msg.id)} title="حذف پیام">
-                        🗑️
-                      </span>
-                    )}
+                    {isMe && <span className="delete-btn" onClick={() => deleteMessage(msg.id)} title="حذف پیام">🗑️</span>}
                   </div>
                 </div>
               );
@@ -281,31 +252,11 @@ function App() {
           </div>
 
           <form className="input-area" onSubmit={sendMessage}>
-            {/* دکمه مخفی برای انتخاب فایل */}
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              onChange={handleImageUpload} 
-              style={{ display: 'none' }} 
-            />
-            
-            {/* دکمه سنجاق برای باز کردن پنجره انتخاب عکس */}
-            <button 
-              type="button" 
-              className="attach-btn" 
-              onClick={() => fileInputRef.current.click()}
-              disabled={uploading}
-            >
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
+            <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>
               {uploading ? '⏳' : '📎'}
             </button>
-
-            <input 
-              placeholder="پیام..." 
-              value={newMessage} 
-              onChange={(e) => setNewMessage(e.target.value)} 
-            />
-            
+            <input placeholder="پیام..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
             <button type="submit" className="send-btn">
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>
