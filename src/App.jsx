@@ -39,7 +39,7 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. لاگین
+  // ۱. لاگین ناشناس
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -54,7 +54,7 @@ function App() {
     checkUser();
   }, []);
 
-  // ۲. آنلاین بودن
+  // ۲. سیستم آنلاین بودن (Presence)
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -74,6 +74,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
+  // ۳. تنظیم پروفایل
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -99,6 +100,7 @@ function App() {
     setupUserProfile();
   }, [user]);
 
+  // ۴. دریافت لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase.from('messages').select('chat_id, content, image_url, created_at').like('chat_id', `%${user.id}%`).order('created_at', { ascending: false });
@@ -168,14 +170,13 @@ function App() {
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
   };
 
-  // دریافت پیام‌ها
+  // ۵. دریافت پیام‌ها و رویدادهای لحظه‌ای
   useEffect(() => {
     if (!chatId) return;
 
     const fetchMessages = async () => {
       const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
       if (data) {
-        // اطمینان از اینکه ری‌اکشن‌ها همیشه آبجکت هستند
         const parsedData = data.map(m => ({ ...m, reactions: m.reactions || {} }));
         setMessages(parsedData);
       }
@@ -213,6 +214,7 @@ function App() {
     }
   };
 
+  // ۶. ارسال یا ویرایش پیام
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
@@ -220,7 +222,11 @@ function App() {
     setNewMessage('');
     
     if (editingMessage) {
-      await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
+      const { error } = await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
+      if (error) {
+        console.error("خطای ویرایش:", error);
+        alert("خطا در ویرایش پیام! (کنسول را چک کنید)");
+      }
       setEditingMessage(null);
     } else {
       await supabase.from('messages').insert({ 
@@ -232,6 +238,7 @@ function App() {
     }
   };
 
+  // ۷. آپلود عکس
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
@@ -253,12 +260,11 @@ function App() {
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
-  // ثبت ری‌اکشن
+  // ۸. ثبت ری‌اکشن
   const handleReaction = async (msgId, emoji) => {
     const msg = messages.find(m => m.id === msgId);
     if (!msg) return;
 
-    // کپی عمیق برای جلوگیری از باگ‌های React
     let newReactions = JSON.parse(JSON.stringify(msg.reactions || {}));
     
     if (newReactions[emoji] && newReactions[emoji].includes(user.id)) {
@@ -269,10 +275,13 @@ function App() {
       newReactions[emoji].push(user.id);
     }
     
-    // آپدیت خوش‌بینانه (بلافاصله در UI اعمال میشه)
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reactions: newReactions } : m));
     
-    await supabase.from('messages').update({ reactions: newReactions }).eq('id', msgId);
+    const { error } = await supabase.from('messages').update({ reactions: newReactions }).eq('id', msgId);
+    if (error) {
+      console.error("خطای ری‌اکشن:", error);
+      alert("خطا در ثبت ری‌اکشن! (کنسول را چک کنید)");
+    }
     setReactionPickerMsgId(null);
   };
 
@@ -389,7 +398,6 @@ function App() {
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
                   
-                  {/* حباب پیام */}
                   <div className="message-bubble">
                     {repliedMsg && (
                       <div className="quoted-message">
@@ -403,7 +411,6 @@ function App() {
                     </div>
                   </div>
                   
-                  {/* نمایش ری‌اکشن‌ها (خارج از حباب) */}
                   {hasReactions && (
                     <div className="reactions-container">
                       {Object.entries(msg.reactions).map(([emoji, users]) => (
@@ -414,12 +421,10 @@ function App() {
                     </div>
                   )}
 
-                  {/* اطلاعات و دکمه‌ها */}
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
                       
-                      {/* منوی ری‌اکشن */}
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                         <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
                         {reactionPickerMsgId === msg.id && (
