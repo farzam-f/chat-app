@@ -12,7 +12,6 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
   
-  // استیت‌های تم و مسدودسازی
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
   const [hasBlockedMe, setHasBlockedMe] = useState(false);
@@ -175,20 +174,39 @@ function App() {
     else alert('کاربری با این کد پیدا نشد.');
   };
 
-  // باز کردن چت و چک کردن وضعیت مسدودیت
+  // باز کردن چت و چک کردن اولیه مسدودیت
   const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
     setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
 
-    // چک کردن بلاک شدن
+    await checkBlockStatus(otherUid);
+  };
+
+  // تابع چک کردن وضعیت بلاک
+  const checkBlockStatus = async (otherUid) => {
     const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).single();
-
     setIsBlockedByMe(myProfile?.blocked_ids?.includes(otherUid) || false);
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
+
+  // شنونده زنده برای تغییرات بلاک
+  useEffect(() => {
+    if (!chatUser) return;
+    const profileChannel = supabase.channel(`profile-blocks-${chatUser.uid}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+        if (payload.new.id === user.id) {
+          setIsBlockedByMe(payload.new.blocked_ids?.includes(chatUser.uid) || false);
+        }
+        if (payload.new.id === chatUser.uid) {
+          setHasBlockedMe(payload.new.blocked_ids?.includes(user.id) || false);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(profileChannel);
+  }, [chatUser, user]);
 
   // مسدود / رفع مسدودیت
   const toggleBlock = async () => {
@@ -251,13 +269,20 @@ function App() {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !chatId || isBlockedByMe || hasBlockedMe) return;
+    if (!newMessage.trim() || !chatId) return;
+
+    // چک نهایی قبل از ارسال
+    const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', chatUser.uid).single();
+    if (otherProfile?.blocked_ids?.includes(user.id) || isBlockedByMe) {
+      alert('امکان ارسال پیام وجود ندارد (مسدودیت)');
+      return;
+    }
+
     const msgText = newMessage;
     setNewMessage('');
     
     if (editingMessage) {
-      const { error } = await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
-      if (error) console.error("خطای ویرایش:", error);
+      await supabase.from('messages').update({ content: msgText, is_edited: true }).eq('id', editingMessage.id);
       setEditingMessage(null);
     } else {
       await supabase.from('messages').insert({ 
@@ -272,6 +297,14 @@ function App() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId || isBlockedByMe || hasBlockedMe) return;
+
+    // چک نهایی قبل از ارسال
+    const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', chatUser.uid).single();
+    if (otherProfile?.blocked_ids?.includes(user.id) || isBlockedByMe) {
+      alert('امکان ارسال پیام وجود ندارد (مسدودیت)');
+      return;
+    }
+
     setUploading(true);
     try {
       const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
@@ -345,7 +378,6 @@ function App() {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* دکمه تغییر تم */}
           <button className="theme-toggle-btn" onClick={toggleTheme} title="تغییر تم">
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
@@ -414,7 +446,6 @@ function App() {
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {/* دکمه بلاک */}
               <button className="block-btn" onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
                 {isBlockedByMe ? '✅' : '🚫'}
               </button>
@@ -424,7 +455,6 @@ function App() {
             </div>
           </div>
 
-          {/* پیام‌های سیستمی برای بلاک */}
           {isBlockedByMe && (
             <div className="system-message blocked-msg">شما این کاربر را مسدود کرده‌اید. برای ارسال پیام، ابتدا رفع مسدودیت کنید.</div>
           )}
