@@ -8,7 +8,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [userCode, setUserCode] = useState('');
   const [userName, setUserName] = useState('');
-  const [userAvatar, setUserAvatar] = useState(''); // استیت جدید برای عکس پروفایل
+  const [userAvatar, setUserAvatar] = useState('');
   
   const [isEditingName, setIsEditingName] = useState(false);
   const [chatList, setChatList] = useState([]);
@@ -19,9 +19,15 @@ function App() {
   const [newMessage, setNewMessage] = useState('');
   const [chatId, setChatId] = useState(null);
   const [uploading, setUploading] = useState(false);
+
+  // استیت‌های جدید برای آنلاین بودن و تایپ کردن
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
   
-  const fileInputRef = useRef(null); // برای عکس‌های چت
-  const avatarInputRef = useRef(null); // برای عکس پروفایل
+  const fileInputRef = useRef(null);
+  const avatarInputRef = useRef(null);
+  const chatChannelRef = useRef(null); // برای نگه داشتن کانال چت
+  const typingTimeoutRef = useRef(null); // برای پاک کردن متن تایپ بعد از چند ثانیه
 
   // ۱. لاگین ناشناس
   useEffect(() => {
@@ -38,7 +44,31 @@ function App() {
     checkUser();
   }, []);
 
-  // تولید کد اختصاصی
+  // ۲. سیستم آنلاین بودن (Presence)
+  useEffect(() => {
+    if (!user) return;
+
+    const presenceChannel = supabase.channel('online-users', {
+      config: { presence: { key: user.id } },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        setOnlineUsers(Object.keys(state)); // آیدی همه کسانی که آنلاین هستن
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // به بقیه اعلام کن که من آنلاینم
+          await presenceChannel.track({ online_at: new Date().toISOString() });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [user]);
+
   const generateUniqueCode = async () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -49,7 +79,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۲. تنظیم کد و اسم و عکس
+  // تنظیم کد و اسم و عکس
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -86,25 +116,13 @@ function App() {
   // گرفتن لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
-    
-    const { data: msgs, error } = await supabase
-      .from('messages')
-      .select('chat_id, content, image_url, created_at')
-      .like('chat_id', `%${user.id}%`)
-      .order('created_at', { ascending: false });
-
+    const { data: msgs, error } = await supabase.from('messages').select('chat_id, content, image_url, created_at').like('chat_id', `%${user.id}%`).order('created_at', { ascending: false });
     if (error || !msgs) return;
 
     const uniqueChats = {};
-    msgs.forEach(msg => {
-      if (!uniqueChats[msg.chat_id]) uniqueChats[msg.chat_id] = msg;
-    });
-
+    msgs.forEach(msg => { if (!uniqueChats[msg.chat_id]) uniqueChats[msg.chat_id] = msg; });
     const chatIds = Object.keys(uniqueChats);
-    if (chatIds.length === 0) {
-      setChatList([]);
-      return;
-    }
+    if (chatIds.length === 0) return setChatList([]);
 
     const otherUids = chatIds.map(id => id.split('_').find(uid => uid !== user.id));
     const { data: profiles } = await supabase.from('profiles').select('id, code, username, avatar_url').in('id', otherUids);
@@ -113,18 +131,13 @@ function App() {
       const otherUid = chatId.split('_').find(uid => uid !== user.id);
       const profile = profiles?.find(p => p.id === otherUid);
       const lastMsg = uniqueChats[chatId];
-      
       return {
-        chatId,
-        otherUid,
-        name: profile?.username || `کاربر ${profile?.code || ''}`,
-        code: profile?.code,
-        avatarUrl: profile?.avatar_url,
+        chatId, otherUid, name: profile?.username || `کاربر ${profile?.code || ''}`,
+        code: profile?.code, avatarUrl: profile?.avatar_url,
         lastMessage: lastMsg.image_url ? '📷 عکس' : lastMsg.content,
         lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
       };
     });
-
     setChatList(finalList);
   };
 
@@ -132,7 +145,6 @@ function App() {
     if (user && !chatId) fetchChatList();
   }, [user, chatId]);
 
-  // ذخیره نام
   const saveName = async () => {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
@@ -140,56 +152,32 @@ function App() {
     fetchChatList();
   };
 
-  // ۳. آپلود عکس پروفایل
+  // آپلود عکس پروفایل
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
-
     setUploading(true);
     try {
-      // فشرده‌سازی شدید برای عکس پروفایل (چون کوچیک نمایش داده میشه)
       const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
-      
       const filePath = `avatars/${user.id}.webp`;
-
-      // آپلود به استوریج (با آپشن upsert: true تا بتونه عکس قبلی رو جایگزین کنه)
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(filePath, compressedFile, { upsert: true });
-
+      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile, { upsert: true });
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-
-      // ذخیره در دیتابیس
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
-      
       setUserAvatar(publicUrl);
-      fetchChatList(); // آپدیت لیست چت‌ها
-
-    } catch (error) {
-      console.error('خطا در آپلود آواتار:', error);
-      alert('خطا در آپلود عکس پروفایل!');
-    } finally {
-      setUploading(false);
-      if (avatarInputRef.current) avatarInputRef.current.value = '';
-    }
+      fetchChatList();
+    } catch (error) { alert('خطا در آپلود عکس پروفایل!'); } finally { setUploading(false); }
   };
 
-  // جستجوی کاربر جدید
+  // جستجوی کاربر
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
     if (code === userCode) return alert('این کد خودتان است!');
-    
     const { data } = await supabase.from('profiles').select('id, code, username, avatar_url').eq('code', code).maybeSingle();
-    
-    if (data) {
-      openChat(data.id, data.code, data.username, data.avatar_url);
-    } else {
-      alert('کاربری با این کد پیدا نشد.');
-    }
+    if (data) openChat(data.id, data.code, data.username, data.avatar_url);
+    else alert('کاربری با این کد پیدا نشد.');
   };
 
   const openChat = (otherUid, otherCode, otherName, otherAvatar) => {
@@ -198,9 +186,10 @@ function App() {
     setChatId(newChatId);
     setIsSearching(false);
     setTargetCode('');
+    setIsOtherTyping(false);
   };
 
-  // دریافت پیام‌ها (Real-time)
+  // دریافت پیام‌ها و وضعیت تایپ (Real-time)
   useEffect(() => {
     if (!chatId) return;
 
@@ -211,19 +200,45 @@ function App() {
     fetchMessages();
 
     const channel = supabase
-      .channel('chat-room')
+      .channel(`chat-room-${chatId}`)
+      // پیام‌های جدید
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` }, (payload) => {
         setMessages((prev) => [...prev, payload.new]);
       })
+      // حذف پیام
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
         setMessages((prev) => prev.filter((msg) => msg.id !== payload.old.id));
       })
+      // گوش دادن به تایپ کردن طرف مقابل
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.user_id !== user.id) {
+          setIsOtherTyping(true);
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 2500); // بعد از ۲.۵ ثانیه پاک میشه
+        }
+      })
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, [chatId]);
+    chatChannelRef.current = channel;
 
-  // ارسال پیام
+    return () => {
+      supabase.removeChannel(channel);
+      setIsOtherTyping(false);
+    };
+  }, [chatId, user.id]);
+
+  // ارسال سیگنال تایپ کردن
+  const handleTyping = (e) => {
+    setNewMessage(e.target.value);
+    if (e.target.value.length > 0 && chatChannelRef.current) {
+      chatChannelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { user_id: user.id }
+      });
+    }
+  };
+
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
@@ -232,11 +247,9 @@ function App() {
     await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: msgText });
   };
 
-  // آپلود عکس چت
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
-
     setUploading(true);
     try {
       const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true, fileType: 'image/webp' };
@@ -244,27 +257,17 @@ function App() {
       const fileExt = compressedFile.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
       const filePath = `${chatId}/${fileName}`;
-
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl });
-
-    } catch (error) {
-      console.error('خطا در آپلود عکس:', error);
-      alert('خطا در آپلود عکس!');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+    } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
-      if (error) alert('خطا در حذف پیام!');
-      else setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
+      if (!error) setMessages((prev) => prev.filter((msg) => msg.id !== msgId));
     }
   };
 
@@ -275,19 +278,20 @@ function App() {
 
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   };
 
   if (loading) return <div className="loading-screen">در حال اتصال...</div>;
   if (!user) return <div className="loading-screen">در حال ساخت حساب...</div>;
 
+  // چک کردن اینکه طرف مقابل آنلاین هست یا نه
+  const isOtherOnline = chatUser ? onlineUsers.includes(chatUser.uid) : false;
+
   return (
     <div className="app-container">
       <header className="header">
         <div className="profile-section">
-          {/* آواتار کاربر */}
-          <div className="my-avatar" onClick={() => avatarInputRef.current.click()} title="برای تغییر عکس کلیک کنید">
+          <div className="my-avatar" onClick={() => avatarInputRef.current.click()}>
             {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
           </div>
           <input type="file" accept="image/*" ref={avatarInputRef} onChange={handleAvatarUpload} style={{ display: 'none' }} />
@@ -298,14 +302,12 @@ function App() {
               <button onClick={saveName}>ذخیره</button>
             </div>
           ) : (
-            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }} title="برای تغییر اسم کلیک کنید">
+            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }}>
               {userName ? userName : 'پیام‌رسان ✎'}
             </h2>
           )}
         </div>
-        <div className="user-code-badge" onClick={copyCode}>
-          {userCode || '...'}
-        </div>
+        <div className="user-code-badge" onClick={copyCode}>{userCode || '...'}</div>
       </header>
 
       {!chatUser ? (
@@ -320,7 +322,7 @@ function App() {
           {isSearching && (
             <div className="search-area">
               <form className="search-box" onSubmit={handleSearch}>
-                <input placeholder="کد اختصاصی دوستتان را وارد کنید..." value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
+                <input placeholder="کد اختصاصی..." value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
                 <button type="submit">شروع</button>
               </form>
             </div>
@@ -328,22 +330,29 @@ function App() {
 
           <div className="chat-list">
             {chatList.length === 0 ? (
-              <div className="empty-list">هنوز چتی ندارید. با دکمه بالا یکی شروع کنید!</div>
+              <div className="empty-list">هنوز چتی ندارید.</div>
             ) : (
-              chatList.map(chat => (
-                <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
-                  <div className="avatar">
-                    {chat.avatarUrl ? <img src={chat.avatarUrl} alt="avatar" /> : chat.name.charAt(0)}
-                  </div>
-                  <div className="chat-info">
-                    <div className="chat-name-time">
-                      <span className="chat-name">{chat.name}</span>
-                      <span className="chat-time">{chat.lastTime}</span>
+              chatList.map(chat => {
+                // آواتار و آنلاین بودن توی لیست چت‌ها
+                const isOnlineInList = onlineUsers.includes(chat.otherUid);
+                return (
+                  <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
+                    <div className="avatar-container">
+                      <div className="avatar">
+                        {chat.avatarUrl ? <img src={chat.avatarUrl} alt="avatar" /> : chat.name.charAt(0)}
+                      </div>
+                      {isOnlineInList && <div className="online-dot-list"></div>}
                     </div>
-                    <div className="chat-last-msg">{chat.lastMessage}</div>
+                    <div className="chat-info">
+                      <div className="chat-name-time">
+                        <span className="chat-name">{chat.name}</span>
+                        <span className="chat-time">{chat.lastTime}</span>
+                      </div>
+                      <div className="chat-last-msg">{chat.lastMessage}</div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -354,7 +363,19 @@ function App() {
               <div className="avatar-small">
                 {chatUser.avatarUrl ? <img src={chatUser.avatarUrl} alt="avatar" /> : (chatUser.name ? chatUser.name.charAt(0) : '?')}
               </div>
-              <h3>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
+              <div>
+                <h3 style={{ margin: 0 }}>{chatUser.name ? chatUser.name : `چت با ${chatUser.code}`}</h3>
+                {/* نشانگر آنلاین یا در حال تایپ */}
+                <div className="status-text">
+                  {isOtherTyping ? (
+                    <span className="typing-text">در حال تایپ...</span>
+                  ) : isOtherOnline ? (
+                    <span className="online-text">آنلاین</span>
+                  ) : (
+                    <span className="offline-text">آفلاین</span>
+                  )}
+                </div>
+              </div>
             </div>
             <button className="back-btn" onClick={() => { setChatUser(null); setChatId(null); setMessages([]); }}>
               بستن ✕
@@ -371,7 +392,7 @@ function App() {
                   </div>
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
-                    {isMe && <span className="delete-btn" onClick={() => deleteMessage(msg.id)} title="حذف پیام">🗑️</span>}
+                    {isMe && <span className="delete-btn" onClick={() => deleteMessage(msg.id)}>🗑️</span>}
                   </div>
                 </div>
               );
@@ -383,7 +404,12 @@ function App() {
             <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>
               {uploading ? '⏳' : '📎'}
             </button>
-            <input placeholder="پیام..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+            <input 
+              type="text"
+              placeholder="پیام..." 
+              value={newMessage} 
+              onChange={handleTyping} // تابع تغییر کرد تا سیگنال تایپ بفرسته
+            />
             <button type="submit" className="send-btn">
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>

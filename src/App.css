@@ -74,6 +74,7 @@ html, body, #root {
   overflow: hidden;
   border: 2px solid #2b5278;
   transition: 0.2s;
+  flex-shrink: 0;
 }
 
 .my-avatar:hover {
@@ -229,6 +230,13 @@ html, body, #root {
   background-color: #202b36;
 }
 
+/* تنظیمات آواتار در لیست */
+.avatar-container {
+  position: relative;
+  display: flex;
+  margin-left: 15px;
+}
+
 .avatar {
   width: 50px;
   height: 50px;
@@ -240,7 +248,6 @@ html, body, #root {
   align-items: center;
   font-size: 1.2rem;
   font-weight: bold;
-  margin-left: 15px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -249,6 +256,18 @@ html, body, #root {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* دایره سبز آنلاین در لیست چت */
+.online-dot-list {
+  position: absolute;
+  bottom: 0;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  background-color: #4caf50;
+  border: 2px solid #17212b;
+  border-radius: 50%;
 }
 
 .chat-info {
@@ -326,6 +345,27 @@ html, body, #root {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* وضعیت آنلاین و در حال تایپ */
+.status-text {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.online-text {
+  color: #4caf50;
+  font-weight: bold;
+}
+
+.offline-text {
+  color: #7f91a4;
+}
+
+.typing-text {
+  color: #5eb5f7;
+  font-style: italic;
+  font-weight: bold;
 }
 
 .back-btn {
