@@ -405,7 +405,6 @@ function App() {
     setReactionPickerMsgId(null);
   };
 
-  // 🔥 تابع استخراج مسیر فایل از URL
   const getStoragePath = (url) => {
     if (!url) return null;
     try {
@@ -417,7 +416,6 @@ function App() {
     }
   };
 
-  // 🔥 حذف پیام تکی همراه با فایل فیزیکی
   const deleteMessage = async (msgId) => {
     if (window.confirm('آیا از حذف این پیام مطمئن هستید؟')) {
       const msg = messages.find(m => m.id === msgId);
@@ -427,8 +425,7 @@ function App() {
         if (fileUrl) {
           const path = getStoragePath(fileUrl);
           if (path) {
-            const { error: storageError } = await supabase.storage.from('chat-images').remove([path]);
-            if (storageError) console.error("خطا در حذف فایل از استوریج:", storageError);
+            await supabase.storage.from('chat-images').remove([path]);
           }
         }
       }
@@ -438,7 +435,6 @@ function App() {
     }
   };
 
-  // 🔥 حذف کل چت همراه با فایل‌های فیزیکی
   const handleClearChat = async (mode) => {
     if (mode === 'me') {
       const { error } = await supabase.rpc('delete_chat_for_user', { chat_id_param: chatId, user_id_param: user.id });
@@ -450,14 +446,14 @@ function App() {
       if (msgs) {
         const paths = msgs.map(m => getStoragePath(m.image_url || m.audio_url)).filter(Boolean);
         if (paths.length > 0) {
-          const { error: storageError } = await supabase.storage.from('chat-images').remove(paths);
-          if (storageError) console.error("خطا در حذف فایل‌ها از استوریج:", storageError);
+          await supabase.storage.from('chat-images').remove(paths);
         }
       }
 
       const { error } = await supabase.from('messages').delete().eq('chat_id', chatId);
-      if (error) console.error("خطا در حذف پیام‌ها از دیتابیس:", error);
-      setMessages([]); setChatUser(null); setChatId(null);
+      if (!error) {
+        setMessages([]); setChatUser(null); setChatId(null);
+      }
     }
     setShowClearModal(false);
   };
@@ -487,7 +483,7 @@ function App() {
             </div>
           ) : (
             <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }}>
-              {userName ? userName : 'پیام‌رسان ✎'}
+              {userName ? userName : 'F.L.W ✎'}
             </h2>
           )}
         </div>
@@ -503,7 +499,10 @@ function App() {
       {!chatUser ? (
         <div className="main-list-area">
           <div className="list-header">
-            <h3>چت‌ها</h3>
+            {/* لوگوی تصویری جدید */}
+            <div className="brand-logo-img">
+              <img src="/logo.png" alt="F.L.W Logo" />
+            </div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
               {isSearching ? 'بستن' : 'چت جدید +'}
             </button>
@@ -520,7 +519,7 @@ function App() {
 
           <div className="chat-list">
             {chatList.length === 0 ? (
-              <div className="empty-list">هنوز چتی ندارید.</div>
+              <div className="empty-list">هنوز چتی ندارید. با دکمه بالا یکی شروع کنید!</div>
             ) : (
               chatList.map(chat => {
                 const isOnlineInList = onlineUsers.includes(chat.otherUid);

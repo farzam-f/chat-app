@@ -1,5 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap');
 
+/* ۱. متغیرهای رنگی تم تاریک */
 :root {
   --bg-main: #0e1621;
   --bg-panel: #17212b;
@@ -14,6 +15,7 @@
   --unread-bg: #5eb5f7;
 }
 
+/* ۲. متغیرهای رنگی تم روشن */
 [data-theme="light"] {
   --bg-main: #e5e5e5;
   --bg-panel: #ffffff;
@@ -28,12 +30,13 @@
   --unread-bg: #007bff;
 }
 
+/* ۳. تنظیمات پایه */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-color: var(--bg-main); color: var(--text-main); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.3s, color 0.3s; }
 .app-container { display: flex; flex-direction: column; height: 100vh; height: 100dvh; width: 100%; max-width: 800px; margin: 0 auto; background-color: var(--bg-panel); box-shadow: 0 0 20px rgba(0,0,0,0.2); transition: background-color 0.3s; position: relative; }
 
-/* هدر */
-.header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; z-index: 10; }
+/* ۴. هدر بالای سایت */
+.header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); flex-shrink: 0; z-index: 10; transition: background-color 0.3s; }
 .profile-section { display: flex; align-items: center; }
 .header h2 { font-size: 1.1rem; color: var(--text-main); cursor: pointer; transition: color 0.2s; margin-right: 12px; }
 .my-avatar { width: 40px; height: 40px; border-radius: 50%; background-color: var(--msg-out); color: var(--text-main); display: flex; justify-content: center; align-items: center; font-size: 1.2rem; font-weight: bold; cursor: pointer; overflow: hidden; border: 2px solid var(--msg-out); flex-shrink: 0; }
@@ -44,8 +47,8 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .user-code-badge { background-color: var(--bg-input); color: var(--text-main); padding: 6px 14px; border-radius: 20px; font-size: 0.9rem; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.2s; }
 .theme-toggle-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; padding: 5px; transition: 0.2s; }
 
-/* لیست چت‌ها */
-.main-list-area { display: flex; flex-direction: column; flex: 1; min-height: 0; background-color: var(--bg-main); }
+/* ۵. صفحه لیست چت‌ها */
+.main-list-area { display: flex; flex-direction: column; flex: 1; min-height: 0; background-color: var(--bg-main); transition: background-color 0.3s; }
 .list-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--border-color); }
 .list-header h3 { font-size: 1.1rem; color: var(--text-main); }
 .new-chat-btn { background-color: var(--msg-out); color: var(--text-main); border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.9rem; transition: 0.2s; }
@@ -70,9 +73,9 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .chat-last-msg { color: var(--text-muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
 .unread-badge { background-color: var(--unread-bg); color: #fff; font-size: 0.75rem; font-weight: bold; min-width: 20px; height: 20px; border-radius: 10px; display: flex; justify-content: center; align-items: center; padding: 0 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
-/* صفحه چت */
+/* ۶. صفحه داخل چت */
 .chat-container { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
-.chat-header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+.chat-header { background-color: var(--bg-panel); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); flex-shrink: 0; transition: background-color 0.3s; }
 .chat-header h3 { font-size: 1rem; color: var(--text-main); }
 .avatar-small { width: 35px; height: 35px; border-radius: 50%; background-color: var(--msg-out); color: var(--text-main); display: flex; justify-content: center; align-items: center; font-size: 0.9rem; font-weight: bold; overflow: hidden; }
 .avatar-small img { width: 100%; height: 100%; object-fit: cover; }
@@ -84,10 +87,11 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .block-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; opacity: 0.7; transition: 0.2s; }
 .block-btn:hover { opacity: 1; transform: scale(1.1); }
 
+/* پیام سیستمی مسدودیت */
 .system-message { text-align: center; font-size: 0.85rem; padding: 10px; background-color: rgba(255, 77, 77, 0.1); color: #ff4d4d; border-bottom: 1px solid var(--border-color); }
 
-/* پیام‌ها */
-.messages-area { flex: 1; min-height: 0; padding: 20px; overflow-y: auto; background-color: var(--bg-main); background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png'); background-size: cover; display: flex; flex-direction: column; gap: 12px; }
+/* ۷. ناحیه پیام‌ها */
+.messages-area { flex: 1; min-height: 0; padding: 20px; overflow-y: auto; background-color: var(--bg-main); background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png'); background-size: cover; display: flex; flex-direction: column; gap: 12px; transition: background-color 0.3s; }
 .message-wrapper { display: flex; flex-direction: column; max-width: 80%; position: relative; }
 .message-wrapper.outgoing { align-self: flex-end; align-items: flex-end; }
 .message-wrapper.incoming { align-self: flex-start; align-items: flex-start; }
@@ -95,19 +99,11 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .message-wrapper.outgoing .message-bubble { background-color: var(--msg-out); border-bottom-right-radius: 4px; }
 .message-wrapper.incoming .message-bubble { background-color: var(--msg-in); border-bottom-left-radius: 4px; }
 .chat-image { max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-bottom: 5px; }
+.voice-player { width: 250px; height: 40px; outline: none; border-radius: 20px; margin-bottom: 5px; }
 .message-meta { display: flex; justify-content: flex-end; margin-top: 4px; }
 .edited-tag { font-size: 0.65rem; color: var(--msg-time); }
 
-/* استایل پلیر صوتی */
-.voice-player {
-  width: 250px;
-  height: 40px;
-  outline: none;
-  border-radius: 20px;
-  margin-bottom: 5px;
-}
-
-/* ری‌اکشن‌ها */
+/* ۸. ری‌اکشن‌ها */
 .reactions-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -8px; margin-bottom: 4px; z-index: 5; }
 .reaction-badge { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 3px; color: var(--text-main); }
 .reaction-picker { position: absolute; bottom: 30px; background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 10px; display: flex; gap: 8px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
@@ -115,7 +111,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .picker-left { left: 0; }
 .picker-right { right: 0; }
 
-/* اطلاعات پیام */
+/* ۹. اطلاعات پیام */
 .message-info { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; width: 100%; padding: 0 5px; }
 .message-wrapper.outgoing .message-info { flex-direction: row-reverse; }
 .message-wrapper.incoming .message-info { flex-direction: row; }
@@ -124,7 +120,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .action-btn { font-size: 0.8rem; cursor: pointer; opacity: 0.5; transition: 0.2s; }
 .action-btn:hover { opacity: 1; transform: scale(1.2); }
 
-/* نقل قول و باکس ارسال */
+/* ۱۰. نقل قول و باکس ارسال */
 .quoted-message { background-color: rgba(0, 0, 0, 0.1); border-right: 3px solid var(--accent-color); padding: 5px 10px; border-radius: 5px; margin-bottom: 8px; font-size: 0.8rem; cursor: pointer; }
 .quoted-name { color: var(--accent-color); font-weight: bold; margin-bottom: 2px; }
 .quoted-text { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -134,7 +130,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .reply-banner-text { color: var(--text-muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
 .cancel-reply-btn { background: none; border: none; color: #ff4d4d; font-size: 1rem; cursor: pointer; font-weight: bold; }
 
-.input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); position: relative; }
+.input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); position: relative; transition: background-color 0.3s; }
 .input-form { display: flex; width: 100%; align-items: center; gap: 10px; }
 .input-area input[type="text"] { flex: 1; background-color: var(--bg-input); border: none; padding: 14px 20px; border-radius: 25px; color: var(--text-main); font-family: inherit; font-size: 1rem; outline: none; min-width: 0; }
 .input-area input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -146,65 +142,17 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .send-btn { background-color: var(--msg-out); color: #fff; border: none; width: 48px; height: 48px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; flex-shrink: 0; transition: 0.2s; font-size: 1.5rem; }
 .send-btn:disabled { background-color: var(--bg-input); color: var(--text-muted); cursor: not-allowed; }
 .send-btn svg { width: 22px; height: 22px; fill: currentColor; margin-right: 2px; }
+.mic-btn { background-color: var(--accent-color); }
 
-/* استایل‌های ضبط صدا */
-.recording-ui {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  background-color: rgba(255, 77, 77, 0.1);
-  padding: 10px 15px;
-  border-radius: 25px;
-  gap: 15px;
-}
+/* ۱۱. استایل‌های ضبط صدا */
+.recording-ui { display: flex; align-items: center; width: 100%; background-color: rgba(255, 77, 77, 0.1); padding: 10px 15px; border-radius: 25px; gap: 15px; }
+.recording-dot { width: 12px; height: 12px; background-color: #ff4d4d; border-radius: 50%; animation: pulse 1s infinite; }
+@keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); } }
+.recording-text { color: #ff4d4d; font-weight: bold; flex: 1; }
+.stop-record-btn { background-color: #ff4d4d; color: white; border: none; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-family: inherit; font-weight: bold; }
+.cancel-record-btn { background: none; border: none; color: var(--text-muted); font-size: 1rem; cursor: pointer; font-weight: bold; }
 
-.recording-dot {
-  width: 12px;
-  height: 12px;
-  background-color: #ff4d4d;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 77, 77, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
-}
-
-.recording-text {
-  color: #ff4d4d;
-  font-weight: bold;
-  flex: 1;
-}
-
-.stop-record-btn {
-  background-color: #ff4d4d;
-  color: white;
-  border: none;
-  padding: 8px 15px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: bold;
-}
-
-.cancel-record-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1rem;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-.mic-btn {
-  background-color: var(--accent-color);
-}
-
-.loading-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background-color: var(--bg-main); color: var(--text-main); font-family: 'Vazirmatn', Tahoma, sans-serif; }
-
-/* مودال حذف */
+/* ۱۲. مودال حذف */
 .modal-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(3px); }
 .modal-content { background-color: var(--bg-panel); padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; border: 1px solid var(--border-color); }
 .modal-content h3 { margin-bottom: 10px; color: var(--text-main); }
@@ -217,3 +165,48 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .btn-both:hover { background-color: #d32f2f; }
 .btn-cancel { background: none; color: var(--text-muted); }
 .btn-cancel:hover { color: var(--text-main); }
+
+.loading-screen { display: flex; justify-content: center; align-items: center; height: 100dvh; background-color: var(--bg-main); color: var(--text-main); font-family: 'Vazirmatn', Tahoma, sans-serif; }
+
+/* --- استایل لوگوی تصویری F.L.W --- */
+.brand-logo-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  background-color: #000; /* پس‌زمینه مشکی برای لوگو */
+  box-shadow: 0 4px 15px rgba(94, 181, 247, 0.3);
+  animation: logoGlow 3s infinite alternate;
+  overflow: hidden;
+}
+
+.brand-logo-img img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+@keyframes logoGlow {
+  0% { box-shadow: 0 4px 15px rgba(94, 181, 247, 0.3); }
+  100% { box-shadow: 0 4px 25px rgba(94, 181, 247, 0.6); }
+}
+
+/* --- انیمیشن‌های نرم --- */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-wrapper {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.chat-list-item {
+  animation: fadeInUp 0.2s ease-out;
+}
+
+.modal-content {
+  animation: fadeInUp 0.3s ease-out;
+}
