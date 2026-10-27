@@ -44,7 +44,6 @@ function App() {
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // تغییر تم
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
@@ -54,7 +53,6 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. لاگین ناشناس
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -69,7 +67,6 @@ function App() {
     checkUser();
   }, []);
 
-  // ۲. سیستم آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -89,7 +86,6 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۳. تنظیم پروفایل
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -115,7 +111,6 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. دریافت لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase
@@ -249,7 +244,6 @@ function App() {
     setIsBlockedByMe(!isBlockedByMe);
   };
 
-  // ۵. دریافت پیام‌ها
   useEffect(() => {
     if (!chatId) return;
 
@@ -499,9 +493,9 @@ function App() {
       {!chatUser ? (
         <div className="main-list-area">
           <div className="list-header">
-            {/* لوگوی تصویری جدید */}
+            {/* لوگوی تصویری با مسیر اصلاح‌شده */}
             <div className="brand-logo-img">
-              <img src="/logo.png" alt="F.L.W Logo" />
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="F.L.W Logo" />
             </div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
               {isSearching ? 'بستن' : 'چت جدید +'}

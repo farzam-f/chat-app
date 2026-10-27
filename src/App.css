@@ -176,21 +176,14 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
   width: 45px;
   height: 45px;
   border-radius: 12px;
-  background-color: #000; /* پس‌زمینه مشکی برای لوگو */
-  box-shadow: 0 4px 15px rgba(94, 181, 247, 0.3);
-  animation: logoGlow 3s infinite alternate;
+  background-color: transparent; /* پس‌زمینه شفاف برای هر دو تم */
   overflow: hidden;
 }
 
 .brand-logo-img img {
-  width: 80%;
-  height: 80%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-}
-
-@keyframes logoGlow {
-  0% { box-shadow: 0 4px 15px rgba(94, 181, 247, 0.3); }
-  100% { box-shadow: 0 4px 25px rgba(94, 181, 247, 0.6); }
 }
 
 /* --- انیمیشن‌های نرم --- */
