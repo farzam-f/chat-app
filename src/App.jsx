@@ -4,7 +4,7 @@ import imageCompression from 'browser-image-compression';
 import logoImg from './logo.png';
 import './App.css';
 
-const EMOJIS = ['😊', '😂', '❤️', '👍', '🔥', '😍', '🙏', '👏', '😢', '😡', '🎉', '👀', '💯', '🤔', '😎', '🤝', '😭', '😱', '🥳', '🤩', '😴', '🤯', '💀', '👻'];
+const EMOJIS = ['😊', '😂', '❤️', '👍', '🔥', '😍', '🙏', '👏', '😢', '😡', '🎉', '👀', '💯', '🤔', '😎', '🤝'];
 
 function App() {
   const [user, setUser] = useState(null);
@@ -13,6 +13,7 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
   
+  // Auth State
   const [isLogin, setIsLogin] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authPass, setAuthPass] = useState('');
@@ -49,7 +50,8 @@ function App() {
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
   
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef(null); // for images
+  const docInputRef = useRef(null); // for files/videos
   const avatarInputRef = useRef(null);
   const chatChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -64,7 +66,7 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. لاگین
+  // ۱. بررسی وضعیت لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -72,7 +74,10 @@ function App() {
       setLoading(false);
     };
     checkUser();
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user || null); });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
     return () => authListener.subscription.unsubscribe();
   }, []);
 
@@ -102,6 +107,7 @@ function App() {
       if (user) {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (error) return console.error(error);
+
         if (data) {
           setUserCode(data.code); setUserName(data.username || ''); setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
@@ -111,11 +117,48 @@ function App() {
     setupUserProfile();
   }, [user]);
 
+  // ۴. توابع لاگین و ثبت‌نام
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
+    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
+
+    setAuthLoading(true);
+    const email = `${authName.toLowerCase()}@flw.local`;
+
+    if (isLogin) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
+      if (error) alert('نام کاربری یا رمز عبور اشتباه است!');
+      else setUser(data.user);
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password: authPass });
+      if (error) alert(error.message);
+      else if (data.user) {
+        const newCode = await generateUniqueCode();
+        await supabase.from('profiles').insert({
+          id: data.user.id, code: newCode, username: authName,
+          username_login: authName, password_login: authPass
+        });
+        setUser(data.user);
+      }
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
+      await supabase.auth.signOut();
+      setUser(null); setUserCode(''); setUserName(''); setUserAvatar('');
+      localStorage.removeItem('myChatCode');
+    }
+  };
+
+  // دریافت لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase
       .from('messages')
-      .select('chat_id, content, image_url, audio_url, created_at, sender_id, is_read, deleted_for')
+      .select('chat_id, content, image_url, audio_url, file_url, created_at, sender_id, is_read, deleted_for')
       .like('chat_id', `%${user.id}%`)
       .order('created_at', { ascending: false });
     if (error || !msgs) return;
@@ -140,7 +183,7 @@ function App() {
       return {
         chatId, otherUid, name: profile?.username || `کاربر ${profile?.code || ''}`,
         code: profile?.code, avatarUrl: profile?.avatar_url,
-        lastMessage: lastMsg.image_url ? '📷 عکس' : (lastMsg.audio_url ? '🎙️ پیام صوتی' : lastMsg.content),
+        lastMessage: lastMsg.file_url ? '📎 فایل' : lastMsg.image_url ? '📷 عکس' : (lastMsg.audio_url ? '🎙️ پیام صوتی' : lastMsg.content),
         lastTime: new Date(lastMsg.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
         unreadCount: unreadCounts[chatId] || 0
       };
@@ -150,47 +193,14 @@ function App() {
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
 
-  // ۴. احراز هویت
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
-    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
-
-    setAuthLoading(true);
-    const email = `${authName.toLowerCase()}@flw.local`;
-
-    if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
-      if (error) alert('نام کاربری یا رمز عبور اشتباه است!');
-      else setUser(data.user);
-    } else {
-      const { data, error } = await supabase.auth.signUp({ email, password: authPass });
-      if (error) alert(error.message);
-      else if (data.user) {
-        const newCode = await generateUniqueCode();
-        await supabase.from('profiles').insert({
-          id: data.user.id, code: newCode, username: authName, username_login: authName, password_login: authPass
-        });
-        setUser(data.user);
-      }
-    }
-    setAuthLoading(false);
-  };
-
-  const handleLogout = async () => {
-    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
-      await supabase.auth.signOut();
-      setUser(null); setUserCode(''); setUserName(''); setUserAvatar('');
-      localStorage.removeItem('myChatCode');
-    }
-  };
-
   const saveName = async () => {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
-    setIsEditingName(false); fetchChatList();
+    setIsEditingName(false);
+    fetchChatList();
   };
 
+  // آپلود عکس پروفایل
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -203,10 +213,12 @@ function App() {
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
-      setUserAvatar(publicUrl); fetchChatList();
+      setUserAvatar(publicUrl);
+      fetchChatList();
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
+  // جستجو و گروه
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
@@ -223,14 +235,16 @@ function App() {
     if (!error && data) {
       await supabase.from('group_members').insert({ group_id: data.id, user_id: user.id });
       setGroupList(prev => [...prev, data]);
-      setNewGroupName(''); setSearchTab('user');
+      setNewGroupName('');
+      setSearchTab('user');
     }
   };
 
   const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
-    setGroupChat(null); setChatId(newChatId);
+    setGroupChat(null);
+    setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
     await supabase.from('messages').update({ is_read: true }).eq('chat_id', newChatId).neq('sender_id', user.id).eq('is_read', false);
     setChatList(prev => prev.map(c => c.chatId === newChatId ? { ...c, unreadCount: 0 } : c));
@@ -248,15 +262,7 @@ function App() {
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
 
-  const toggleBlock = async () => {
-    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
-    let blocked = myProfile?.blocked_ids || [];
-    if (isBlockedByMe) { blocked = blocked.filter(id => id !== chatUser.uid); } 
-    else { blocked.push(chatUser.uid); }
-    await supabase.from('profiles').update({ blocked_ids: blocked }).eq('id', user.id);
-    setIsBlockedByMe(!isBlockedByMe);
-  };
-
+  // دریافت پیام‌ها (Real-time)
   useEffect(() => {
     if (!chatId) return;
     const fetchMessages = async () => {
@@ -285,6 +291,13 @@ function App() {
             const updated = prev.map(msg => msg.id === payload.new.id ? { ...payload.new, reactions: payload.new.reactions || {} } : msg);
             return updated.filter(m => !(m.deleted_for || []).includes(user.id));
           });
+        }
+      })
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.user_id !== user?.id) { 
+          setIsOtherTyping(true);
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 2500);
         }
       })
       .subscribe();
@@ -335,6 +348,7 @@ function App() {
     } catch (error) { alert('خطا در آپلود صدا!'); } finally { setUploading(false); }
   };
 
+  // ارسال پیام
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
@@ -349,6 +363,7 @@ function App() {
     }
   };
 
+  // آپلود عکس
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
@@ -363,6 +378,26 @@ function App() {
       await supabase.from('messages').insert({ chat_id: chatId, sender_id: user.id, content: '', image_url: publicUrl, reply_to_id: replyingTo?.id || null, reactions: {} });
       setReplyingTo(null);
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
+  };
+
+  // آپلود فایل و ویدیو
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !chatId) return;
+    setUploading(true);
+    try {
+      const filePath = `${chatId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+      
+      await supabase.from('messages').insert({ 
+        chat_id: chatId, sender_id: user.id, content: '', 
+        file_url: publicUrl, file_name: file.name, file_type: file.type,
+        reply_to_id: replyingTo?.id || null, reactions: {} 
+      });
+      setReplyingTo(null);
+    } catch (error) { alert('خطا در آپلود فایل!'); } finally { setUploading(false); }
   };
 
   const handleReaction = async (msgId, emoji) => {
@@ -387,9 +422,9 @@ function App() {
   };
 
   const deleteMessage = async (msgId) => {
-    if (window.confirm('حذف این پیام؟')) {
+    if (window.confirm('حذف این پیام برای هر دو نفر؟')) {
       const msg = messages.find(m => m.id === msgId);
-      const fileUrl = msg?.image_url || msg?.audio_url;
+      const fileUrl = msg?.image_url || msg?.audio_url || msg?.file_url;
       if (fileUrl) { const path = getStoragePath(fileUrl); if (path) await supabase.storage.from('chat-images').remove([path]); }
       const { error } = await supabase.from('messages').delete().eq('id', msgId);
       if (!error) setMessages((prev) => prev.filter((m) => m.id !== msgId));
@@ -401,9 +436,9 @@ function App() {
       await supabase.rpc('delete_chat_for_user', { chat_id_param: chatId, user_id_param: user.id });
       setMessages([]); setChatUser(null); setGroupChat(null); setChatId(null);
     } else if (mode === 'both') {
-      const { data: msgs } = await supabase.from('messages').select('image_url, audio_url').eq('chat_id', chatId);
+      const { data: msgs } = await supabase.from('messages').select('image_url, audio_url, file_url').eq('chat_id', chatId);
       if (msgs) {
-        const paths = msgs.map(m => getStoragePath(m.image_url || m.audio_url)).filter(Boolean);
+        const paths = msgs.map(m => getStoragePath(m.image_url || m.audio_url || m.file_url)).filter(Boolean);
         if (paths.length > 0) await supabase.storage.from('chat-images').remove(paths);
       }
       await supabase.from('messages').delete().eq('chat_id', chatId);
@@ -416,13 +451,12 @@ function App() {
   const copyCode = () => { navigator.clipboard.writeText(userCode); alert('کد کپی شد!'); };
   const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
 
-  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+  if (loading) return <div className="loading-screen">در حال اتصال...</div>;
 
-  // صفحه لاگین / ثبت‌نام
   if (!user) {
     return (
       <div className="auth-container">
-        <div className="auth-box glass-panel">
+        <div className="auth-box">
           <img src={logoImg} alt="Logo" className="auth-logo" />
           <h2>{isLogin ? 'ورود به F.L.W' : 'ثبت‌نام در F.L.W'}</h2>
           <p>برای استفاده از پیام‌رسان، وارد شوید یا ثبت‌نام کنید.</p>
@@ -443,10 +477,10 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="header glass-panel">
+      <header className="header">
         <div className="profile-section">
           <div className="my-avatar" onClick={() => avatarInputRef.current.click()}>
-            {uploading ? <div className="spinner-small"></div> : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
+            {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
           </div>
           <input type="file" accept="image/*" ref={avatarInputRef} onChange={handleAvatarUpload} style={{ display: 'none' }} />
           {isEditingName ? (
@@ -455,12 +489,12 @@ function App() {
               <button onClick={saveName}>ذخیره</button>
             </div>
           ) : (
-            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer' }}>{userName || 'F.L.W ✎'}</h2>
+            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }}>{userName || 'F.L.W ✎'}</h2>
           )}
         </div>
-        <div className="header-actions">
-          <button className="icon-btn theme-toggle-btn" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-          <button className="icon-btn logout-btn" onClick={handleLogout} title="خروج">🚪</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button className="theme-toggle-btn" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+          <button className="logout-btn" onClick={handleLogout}>خروج</button>
           <div className="user-code-badge" onClick={copyCode}>{userCode || '...'}</div>
         </div>
       </header>
@@ -468,23 +502,23 @@ function App() {
       {!chatUser && !groupChat ? (
         <div className="main-list-area">
           <div className="list-header">
-            <div className="brand-logo-img"><img src={logoImg} alt="Logo" /></div>
+            <div className="brand-logo-img"><img src={logoImg} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>{isSearching ? 'بستن' : 'چت جدید +'}</button>
           </div>
 
           {isSearching && (
             <div className="search-area">
-              <div className="tabs glass-panel">
+              <div className="tabs">
                 <button className={searchTab === 'user' ? 'active' : ''} onClick={() => setSearchTab('user')}>چت خصوصی</button>
                 <button className={searchTab === 'group' ? 'active' : ''} onClick={() => setSearchTab('group')}>ساخت گروه</button>
               </div>
               {searchTab === 'user' ? (
-                <form className="search-box glass-panel" onSubmit={handleSearch}>
+                <form className="search-box" onSubmit={handleSearch}>
                   <input placeholder="کد اختصاصی..." value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
                   <button type="submit">شروع</button>
                 </form>
               ) : (
-                <form className="search-box glass-panel" onSubmit={handleCreateGroup}>
+                <form className="search-box" onSubmit={handleCreateGroup}>
                   <input placeholder="نام گروه..." value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
                   <button type="submit">ساخت</button>
                 </form>
@@ -494,11 +528,11 @@ function App() {
 
           <div className="chat-list">
             {chatList.length === 0 && groupList.length === 0 ? (
-              <div className="empty-list">هنوز چتی ندارید. با دکمه بالا شروع کنید!</div>
+              <div className="empty-list">هنوز چتی ندارید.</div>
             ) : (
               <>
                 {chatList.map(chat => (
-                  <div key={chat.chatId} className="chat-list-item glass-panel" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
+                  <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
                     <div className="avatar-container">
                       <div className="avatar">{chat.avatarUrl ? <img src={chat.avatarUrl} /> : chat.name.charAt(0)}</div>
                       {onlineUsers.includes(chat.otherUid) && <div className="online-dot-list"></div>}
@@ -510,7 +544,7 @@ function App() {
                   </div>
                 ))}
                 {groupList.map(group => (
-                  <div key={group.id} className="chat-list-item glass-panel" onClick={() => openGroup(group)}>
+                  <div key={group.id} className="chat-list-item" onClick={() => openGroup(group)}>
                     <div className="avatar-container"><div className="avatar group-avatar">👥</div></div>
                     <div className="chat-info">
                       <div className="chat-name-time"><span className="chat-name">{group.name}</span><span className="chat-time">گروه</span></div>
@@ -524,28 +558,23 @@ function App() {
         </div>
       ) : (
         <div className="chat-container">
-          <div className="chat-header glass-panel">
-            <div className="chat-user-info">
+          <div className="chat-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="avatar-small">{chatUser?.avatarUrl ? <img src={chatUser.avatarUrl} /> : (groupChat ? '👥' : '?')}</div>
               <div>
-                <h3>{groupChat ? groupChat.name : (chatUser?.name || `چت با ${chatUser?.code}`)}</h3>
+                <h3 style={{ margin: 0 }}>{groupChat ? groupChat.name : (chatUser?.name || `چت با ${chatUser?.code}`)}</h3>
                 {!groupChat && <div className="status-text">{isOtherTyping ? <span className="typing-text">در حال تایپ...</span> : isOtherOnline ? <span className="online-text">آنلاین</span> : <span className="offline-text">آفلاین</span>}</div>}
               </div>
             </div>
-            <div className="chat-header-actions">
-              {!groupChat && (
-                <button className={`icon-btn ${isBlockedByMe ? 'blocked' : ''}`} onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
-                  {isBlockedByMe ? '✅' : '🚫'}
-                </button>
-              )}
-              <button className="icon-btn" onClick={() => setShowClearModal(true)} title="حذف چت">🗑️</button>
-              <button className="icon-btn back-btn" onClick={() => { setChatUser(null); setGroupChat(null); setChatId(null); setMessages([]); }} title="بستن">✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button className="block-btn" onClick={() => setShowClearModal(true)}>🗑️</button>
+              <button className="back-btn" onClick={() => { setChatUser(null); setGroupChat(null); setChatId(null); setMessages([]); }}>بستن ✕</button>
             </div>
           </div>
 
           {showClearModal && (
             <div className="modal-overlay">
-              <div className="modal-content glass-panel">
+              <div className="modal-content">
                 <h3>حذف تاریخچه</h3>
                 <div className="modal-actions">
                   <button className="btn-me" onClick={() => handleClearChat('me')}>فقط برای من</button>
@@ -567,22 +596,23 @@ function App() {
                   <div className="message-bubble">
                     {repliedMsg && (
                       <div className="quoted-message">
-                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : (chatUser?.name || 'طرف مقابل')}</div>
-                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : (repliedMsg.audio_url ? '🎙️ پیام صوتی' : repliedMsg.content)}</div>
+                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : 'طرف مقابل'}</div>
+                        <div className="quoted-text">{repliedMsg.file_url ? '📎 فایل' : repliedMsg.image_url ? '📷 عکس' : (repliedMsg.audio_url ? '🎙️ ویس' : repliedMsg.content)}</div>
                       </div>
                     )}
                     
-                    {msg.audio_url ? (
-                      <audio controls src={msg.audio_url} className="voice-player" />
+                    {msg.file_url ? (
+                      <div className="file-message">
+                        <span>📎 {msg.file_name}</span>
+                        <a href={msg.file_url} download target="_blank" className="download-btn">⬇️ دانلود</a>
+                      </div>
+                    ) : msg.audio_url ? (
+                      <div className="audio-message"><audio controls src={msg.audio_url} className="voice-player" /><a href={msg.audio_url} download className="download-icon">⬇️</a></div>
                     ) : msg.image_url ? (
-                      <img src={msg.image_url} alt="sent" className="chat-image" />
-                    ) : (
-                      msg.content
-                    )}
+                      <div className="image-message"><img src={msg.image_url} className="chat-image" /><a href={msg.image_url} download className="download-icon">⬇️</a></div>
+                    ) : ( msg.content )}
 
-                    <div className="message-meta">
-                       {msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}
-                    </div>
+                    <div className="message-meta">{msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}</div>
                   </div>
                   
                   {hasReactions && (
@@ -598,7 +628,7 @@ function App() {
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
-                      <div className="reaction-wrapper">
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                         <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
                         {reactionPickerMsgId === msg.id && (
                           <div className={`reaction-picker ${isMe ? 'picker-left' : 'picker-right'}`}>
@@ -609,8 +639,8 @@ function App() {
                         )}
                       </div>
                       <span className="action-btn" onClick={() => setReplyingTo(msg)} title="پاسخ">↩️</span>
-                      {isMe && !msg.audio_url && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
-                      {isMe && <span className="action-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>}
+                      {isMe && !msg.audio_url && !msg.file_url && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
+                      <span className="action-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>
                     </div>
                   </div>
                 </div>
@@ -620,18 +650,18 @@ function App() {
           </div>
 
           {(replyingTo || editingMessage) && (
-            <div className="reply-banner glass-panel" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
+            <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
               <div className="reply-banner-info">
                 <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
-                  {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser?.name}`)}
+                  {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser?.name || 'طرف مقابل'}`)}
                 </span>
-                <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.image_url ? '📷 عکس' : (replyingTo.audio_url ? '🎙️ پیام صوتی' : replyingTo.content))}</span>
+                <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.file_url ? '📎 فایل' : replyingTo.image_url ? '📷 عکس' : (replyingTo.audio_url ? '🎙️ ویس' : replyingTo.content))}</span>
               </div>
               <button className="cancel-reply-btn" onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }}>✕</button>
             </div>
           )}
 
-          <div className="input-area glass-panel">
+          <div className="input-area">
             {isRecording ? (
               <div className="recording-ui">
                 <span className="recording-dot"></span><span className="recording-text">در حال ضبط...</span>
@@ -641,20 +671,21 @@ function App() {
             ) : (
               <form onSubmit={handleSendMessage} className="input-form">
                 <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
-                <button type="button" className="input-icon-btn attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>
-                  {uploading ? <div className="spinner-small"></div> : '📎'}
-                </button>
+                <input type="file" accept="*/*" ref={docInputRef} onChange={handleFileUpload} style={{ display: 'none' }} />
                 
-                <div className="emoji-wrapper">
-                  <button type="button" className="input-icon-btn emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
+                <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading} title="عکس">🖼️</button>
+                <button type="button" className="attach-btn" onClick={() => docInputRef.current.click()} disabled={uploading} title="فایل/ویدیو">📎</button>
+                
+                <div style={{ position: 'relative' }}>
+                  <button type="button" className="emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
                   {showEmojiPicker && (
-                    <div className="emoji-picker glass-panel">
+                    <div className="emoji-picker">
                       {EMOJIS.map(e => <span key={e} onClick={() => addEmoji(e)}>{e}</span>)}
                     </div>
                   )}
                 </div>
 
-                <input type="text" placeholder="پیام خود را بنویسید..." value={newMessage} onChange={handleTyping} />
+                <input type="text" placeholder="پیام..." value={newMessage} onChange={handleTyping} />
                 
                 {newMessage.trim() ? (
                   <button type="submit" className="send-btn"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
