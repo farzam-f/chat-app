@@ -14,7 +14,7 @@ function App() {
   const [userAvatar, setUserAvatar] = useState('');
   
   // استیت‌های ثبت‌نام و لاگین
-  const [isLogin, setIsLogin] = useState(false); // false = ثبت‌نام, true = لاگین
+  const [isLogin, setIsLogin] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authPass, setAuthPass] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -69,18 +69,14 @@ function App() {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setUser(session.user);
-      }
+      if (session) setUser(session.user);
       setLoading(false);
     };
     checkUser();
 
-    // گوش دادن به تغییرات لاگین
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
     });
-
     return () => authListener.subscription.unsubscribe();
   }, []);
 
@@ -104,7 +100,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۳. تنظیم پروفایل
+  // ۳. تنظیم پروفایل (دریافت کد و اطلاعات)
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -120,31 +116,27 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. توابع لاگین و ثبت‌نام
+  // ۴. توابع لاگین و ثبت‌نام (به همراه تولید کد اختصاصی)
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
     if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
 
     setAuthLoading(true);
-    const email = `${authName.toLowerCase()}@flw.local`; // تبدیل اسم کاربری به ایمیل فیک
+    const email = `${authName.toLowerCase()}@flw.local`;
 
     if (isLogin) {
-      // ورود
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
-      if (error) {
-        alert('نام کاربری یا رمز عبور اشتباه است!');
-      } else {
-        setUser(data.user);
-      }
+      if (error) alert('نام کاربری یا رمز عبور اشتباه است!');
+      else setUser(data.user);
     } else {
-      // ثبت‌نام
       const { data, error } = await supabase.auth.signUp({ email, password: authPass });
       if (error) {
         alert(error.message);
       } else if (data.user) {
-        // ساخت پروفایل برای کاربر جدید
+        // 🔥 تولید کد اختصاصی برای اکانت جدید
         const newCode = await generateUniqueCode();
+        
         await supabase.from('profiles').insert({
           id: data.user.id,
           code: newCode,
@@ -152,6 +144,7 @@ function App() {
           username_login: authName,
           password_login: authPass
         });
+        
         setUser(data.user);
       }
     }
