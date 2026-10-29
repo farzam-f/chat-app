@@ -192,7 +192,7 @@ function App() {
     fetchChatList();
   };
 
-  // 🔥 اصلاح شده: دکمه کلیک روی آواتار برای باز کردن پنجره فایل
+  // 🔥 تابع اصلاح شده آپلود عکس پروفایل (بدون upsert)
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -200,15 +200,14 @@ function App() {
     try {
       const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
-      const filePath = `avatars/${user.id}.webp`;
       
-      // آپلود با upsert: true برای جایگزینی عکس قبلی
-      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile, { upsert: true });
+      // استفاده از نام یکتا برای جلوگیری از تداخل و خطای 400
+      const filePath = `avatars/${user.id}-${Date.now()}.webp`;
+      
+      const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
       
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
-      // آپدیت دیتابیس
       const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
       
@@ -475,7 +474,6 @@ function App() {
     <div className="app-container">
       <header className="header">
         <div className="profile-section">
-          {/* 🔥 دکمه کلیک روی آواتار برای آپلود عکس */}
           <div className="my-avatar" onClick={() => avatarInputRef.current.click()} title="برای تغییر عکس کلیک کنید">
             {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
           </div>
