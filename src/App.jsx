@@ -4,7 +4,7 @@ import imageCompression from 'browser-image-compression';
 import logoImg from './logo.png';
 import './App.css';
 
-const EMOJIS = ['😊', '😂', '❤️', '👍', '🔥', '😍', '🙏', '👏', '😢', '😡', '🎉', '👀', '💯', '🤔', '😎', '🤝'];
+const EMOJIS = ['😊', '😂', '❤️', '👍', '🔥', '😍', '🙏', '👏', '😢', '😡', '🎉', '👀', '💯', '🤔', '😎', '🤝', '😭', '😱', '🥳', '🤩', '😴', '🤯', '💀', '👻'];
 
 function App() {
   const [user, setUser] = useState(null);
@@ -64,6 +64,7 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
+  // ۱. لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -75,6 +76,7 @@ function App() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
+  // ۲. آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -94,6 +96,7 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
+  // ۳. تنظیم پروفایل
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
@@ -147,6 +150,7 @@ function App() {
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
 
+  // ۴. احراز هویت
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
@@ -161,9 +165,8 @@ function App() {
       else setUser(data.user);
     } else {
       const { data, error } = await supabase.auth.signUp({ email, password: authPass });
-      if (error) {
-        alert(error.message);
-      } else if (data.user) {
+      if (error) alert(error.message);
+      else if (data.user) {
         const newCode = await generateUniqueCode();
         await supabase.from('profiles').insert({
           id: data.user.id, code: newCode, username: authName, username_login: authName, password_login: authPass
@@ -413,12 +416,13 @@ function App() {
   const copyCode = () => { navigator.clipboard.writeText(userCode); alert('کد کپی شد!'); };
   const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
 
-  if (loading) return <div className="loading-screen">در حال اتصال...</div>;
+  if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
 
+  // صفحه لاگین / ثبت‌نام
   if (!user) {
     return (
       <div className="auth-container">
-        <div className="auth-box">
+        <div className="auth-box glass-panel">
           <img src={logoImg} alt="Logo" className="auth-logo" />
           <h2>{isLogin ? 'ورود به F.L.W' : 'ثبت‌نام در F.L.W'}</h2>
           <p>برای استفاده از پیام‌رسان، وارد شوید یا ثبت‌نام کنید.</p>
@@ -439,10 +443,10 @@ function App() {
 
   return (
     <div className="app-container">
-      <header className="header">
+      <header className="header glass-panel">
         <div className="profile-section">
           <div className="my-avatar" onClick={() => avatarInputRef.current.click()}>
-            {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
+            {uploading ? <div className="spinner-small"></div> : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
           </div>
           <input type="file" accept="image/*" ref={avatarInputRef} onChange={handleAvatarUpload} style={{ display: 'none' }} />
           {isEditingName ? (
@@ -451,12 +455,12 @@ function App() {
               <button onClick={saveName}>ذخیره</button>
             </div>
           ) : (
-            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer', marginRight: '10px' }}>{userName || 'F.L.W ✎'}</h2>
+            <h2 onClick={() => setIsEditingName(true)} style={{ cursor: 'pointer' }}>{userName || 'F.L.W ✎'}</h2>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button className="theme-toggle-btn" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
-          <button className="logout-btn" onClick={handleLogout}>خروج</button>
+        <div className="header-actions">
+          <button className="icon-btn theme-toggle-btn" onClick={toggleTheme}>{theme === 'dark' ? '☀️' : '🌙'}</button>
+          <button className="icon-btn logout-btn" onClick={handleLogout} title="خروج">🚪</button>
           <div className="user-code-badge" onClick={copyCode}>{userCode || '...'}</div>
         </div>
       </header>
@@ -464,23 +468,23 @@ function App() {
       {!chatUser && !groupChat ? (
         <div className="main-list-area">
           <div className="list-header">
-            <div className="brand-logo-img"><img src={logoImg} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <div className="brand-logo-img"><img src={logoImg} alt="Logo" /></div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>{isSearching ? 'بستن' : 'چت جدید +'}</button>
           </div>
 
           {isSearching && (
             <div className="search-area">
-              <div className="tabs">
+              <div className="tabs glass-panel">
                 <button className={searchTab === 'user' ? 'active' : ''} onClick={() => setSearchTab('user')}>چت خصوصی</button>
                 <button className={searchTab === 'group' ? 'active' : ''} onClick={() => setSearchTab('group')}>ساخت گروه</button>
               </div>
               {searchTab === 'user' ? (
-                <form className="search-box" onSubmit={handleSearch}>
+                <form className="search-box glass-panel" onSubmit={handleSearch}>
                   <input placeholder="کد اختصاصی..." value={targetCode} onChange={(e) => setTargetCode(e.target.value)} maxLength={6} />
                   <button type="submit">شروع</button>
                 </form>
               ) : (
-                <form className="search-box" onSubmit={handleCreateGroup}>
+                <form className="search-box glass-panel" onSubmit={handleCreateGroup}>
                   <input placeholder="نام گروه..." value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
                   <button type="submit">ساخت</button>
                 </form>
@@ -490,11 +494,11 @@ function App() {
 
           <div className="chat-list">
             {chatList.length === 0 && groupList.length === 0 ? (
-              <div className="empty-list">هنوز چتی ندارید.</div>
+              <div className="empty-list">هنوز چتی ندارید. با دکمه بالا شروع کنید!</div>
             ) : (
               <>
                 {chatList.map(chat => (
-                  <div key={chat.chatId} className="chat-list-item" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
+                  <div key={chat.chatId} className="chat-list-item glass-panel" onClick={() => openChat(chat.otherUid, chat.code, chat.name, chat.avatarUrl)}>
                     <div className="avatar-container">
                       <div className="avatar">{chat.avatarUrl ? <img src={chat.avatarUrl} /> : chat.name.charAt(0)}</div>
                       {onlineUsers.includes(chat.otherUid) && <div className="online-dot-list"></div>}
@@ -506,7 +510,7 @@ function App() {
                   </div>
                 ))}
                 {groupList.map(group => (
-                  <div key={group.id} className="chat-list-item" onClick={() => openGroup(group)}>
+                  <div key={group.id} className="chat-list-item glass-panel" onClick={() => openGroup(group)}>
                     <div className="avatar-container"><div className="avatar group-avatar">👥</div></div>
                     <div className="chat-info">
                       <div className="chat-name-time"><span className="chat-name">{group.name}</span><span className="chat-time">گروه</span></div>
@@ -520,23 +524,28 @@ function App() {
         </div>
       ) : (
         <div className="chat-container">
-          <div className="chat-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="chat-header glass-panel">
+            <div className="chat-user-info">
               <div className="avatar-small">{chatUser?.avatarUrl ? <img src={chatUser.avatarUrl} /> : (groupChat ? '👥' : '?')}</div>
               <div>
-                <h3 style={{ margin: 0 }}>{groupChat ? groupChat.name : (chatUser?.name || `چت با ${chatUser?.code}`)}</h3>
+                <h3>{groupChat ? groupChat.name : (chatUser?.name || `چت با ${chatUser?.code}`)}</h3>
                 {!groupChat && <div className="status-text">{isOtherTyping ? <span className="typing-text">در حال تایپ...</span> : isOtherOnline ? <span className="online-text">آنلاین</span> : <span className="offline-text">آفلاین</span>}</div>}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button className="block-btn" onClick={() => setShowClearModal(true)}>🗑️</button>
-              <button className="back-btn" onClick={() => { setChatUser(null); setGroupChat(null); setChatId(null); setMessages([]); }}>بستن ✕</button>
+            <div className="chat-header-actions">
+              {!groupChat && (
+                <button className={`icon-btn ${isBlockedByMe ? 'blocked' : ''}`} onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
+                  {isBlockedByMe ? '✅' : '🚫'}
+                </button>
+              )}
+              <button className="icon-btn" onClick={() => setShowClearModal(true)} title="حذف چت">🗑️</button>
+              <button className="icon-btn back-btn" onClick={() => { setChatUser(null); setGroupChat(null); setChatId(null); setMessages([]); }} title="بستن">✕</button>
             </div>
           </div>
 
           {showClearModal && (
             <div className="modal-overlay">
-              <div className="modal-content">
+              <div className="modal-content glass-panel">
                 <h3>حذف تاریخچه</h3>
                 <div className="modal-actions">
                   <button className="btn-me" onClick={() => handleClearChat('me')}>فقط برای من</button>
@@ -558,7 +567,7 @@ function App() {
                   <div className="message-bubble">
                     {repliedMsg && (
                       <div className="quoted-message">
-                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
+                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : (chatUser?.name || 'طرف مقابل')}</div>
                         <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : (repliedMsg.audio_url ? '🎙️ پیام صوتی' : repliedMsg.content)}</div>
                       </div>
                     )}
@@ -589,7 +598,7 @@ function App() {
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <div className="reaction-wrapper">
                         <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
                         {reactionPickerMsgId === msg.id && (
                           <div className={`reaction-picker ${isMe ? 'picker-left' : 'picker-right'}`}>
@@ -611,7 +620,7 @@ function App() {
           </div>
 
           {(replyingTo || editingMessage) && (
-            <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
+            <div className="reply-banner glass-panel" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
               <div className="reply-banner-info">
                 <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
                   {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser?.name}`)}
@@ -622,18 +631,31 @@ function App() {
             </div>
           )}
 
-          <div className="input-area">
+          <div className="input-area glass-panel">
             {isRecording ? (
               <div className="recording-ui">
                 <span className="recording-dot"></span><span className="recording-text">در حال ضبط...</span>
-                <button className="stop-record-btn" onClick={() => stopRecording(true)}>⏹️</button>
-                <button className="cancel-record-btn" onClick={() => stopRecording(false)}>✕</button>
+                <button className="stop-record-btn" onClick={() => stopRecording(true)}>⏹️ ارسال</button>
+                <button className="cancel-record-btn" onClick={() => stopRecording(false)}>✕ لغو</button>
               </div>
             ) : (
               <form onSubmit={handleSendMessage} className="input-form">
                 <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} style={{ display: 'none' }} />
-                <button type="button" className="attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>{uploading ? '⏳' : '📎'}</button>
-                <input type="text" placeholder="پیام..." value={newMessage} onChange={handleTyping} />
+                <button type="button" className="input-icon-btn attach-btn" onClick={() => fileInputRef.current.click()} disabled={uploading}>
+                  {uploading ? <div className="spinner-small"></div> : '📎'}
+                </button>
+                
+                <div className="emoji-wrapper">
+                  <button type="button" className="input-icon-btn emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>😊</button>
+                  {showEmojiPicker && (
+                    <div className="emoji-picker glass-panel">
+                      {EMOJIS.map(e => <span key={e} onClick={() => addEmoji(e)}>{e}</span>)}
+                    </div>
+                  )}
+                </div>
+
+                <input type="text" placeholder="پیام خود را بنویسید..." value={newMessage} onChange={handleTyping} />
+                
                 {newMessage.trim() ? (
                   <button type="submit" className="send-btn"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
                 ) : (
