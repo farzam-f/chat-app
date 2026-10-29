@@ -13,7 +13,6 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
   
-  // Auth State
   const [isLogin, setIsLogin] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authPass, setAuthPass] = useState('');
@@ -50,8 +49,8 @@ function App() {
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerMsgId, setReactionPickerMsgId] = useState(null);
   
-  const fileInputRef = useRef(null); // for images
-  const docInputRef = useRef(null); // for files/videos
+  const fileInputRef = useRef(null);
+  const docInputRef = useRef(null);
   const avatarInputRef = useRef(null);
   const chatChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -66,7 +65,6 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. بررسی وضعیت لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -74,14 +72,12 @@ function App() {
       setLoading(false);
     };
     checkUser();
-
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
     });
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // ۲. آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -101,13 +97,11 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۳. تنظیم پروفایل
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (error) return console.error(error);
-
         if (data) {
           setUserCode(data.code); setUserName(data.username || ''); setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
@@ -117,7 +111,6 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. توابع لاگین و ثبت‌نام
   const handleAuth = async (e) => {
     e.preventDefault();
     if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
@@ -153,7 +146,6 @@ function App() {
     }
   };
 
-  // دریافت لیست چت‌ها
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase
@@ -200,7 +192,7 @@ function App() {
     fetchChatList();
   };
 
-  // آپلود عکس پروفایل
+  // 🔥 اصلاح شده: دکمه کلیک روی آواتار برای باز کردن پنجره فایل
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -209,16 +201,25 @@ function App() {
       const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
       const filePath = `avatars/${user.id}.webp`;
+      
+      // آپلود با upsert: true برای جایگزینی عکس قبلی
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile, { upsert: true });
       if (uploadError) throw uploadError;
+      
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      
+      // آپدیت دیتابیس
+      const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+      if (updateError) throw updateError;
+      
       setUserAvatar(publicUrl);
       fetchChatList();
-    } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      alert('خطا در آپلود عکس! (کنسول را چک کنید)');
+    } finally { setUploading(false); }
   };
 
-  // جستجو و گروه
   const handleSearch = async (e) => {
     e.preventDefault();
     const code = targetCode.trim().toUpperCase();
@@ -262,7 +263,6 @@ function App() {
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
 
-  // دریافت پیام‌ها (Real-time)
   useEffect(() => {
     if (!chatId) return;
     const fetchMessages = async () => {
@@ -348,7 +348,6 @@ function App() {
     } catch (error) { alert('خطا در آپلود صدا!'); } finally { setUploading(false); }
   };
 
-  // ارسال پیام
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !chatId) return;
@@ -363,7 +362,6 @@ function App() {
     }
   };
 
-  // آپلود عکس
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
@@ -380,7 +378,6 @@ function App() {
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
-  // آپلود فایل و ویدیو
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !chatId) return;
@@ -390,7 +387,6 @@ function App() {
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
       await supabase.from('messages').insert({ 
         chat_id: chatId, sender_id: user.id, content: '', 
         file_url: publicUrl, file_name: file.name, file_type: file.type,
@@ -479,10 +475,12 @@ function App() {
     <div className="app-container">
       <header className="header">
         <div className="profile-section">
-          <div className="my-avatar" onClick={() => avatarInputRef.current.click()}>
+          {/* 🔥 دکمه کلیک روی آواتار برای آپلود عکس */}
+          <div className="my-avatar" onClick={() => avatarInputRef.current.click()} title="برای تغییر عکس کلیک کنید">
             {uploading ? '⏳' : (userAvatar ? <img src={userAvatar} alt="avatar" /> : (userName ? userName.charAt(0) : '👤'))}
           </div>
           <input type="file" accept="image/*" ref={avatarInputRef} onChange={handleAvatarUpload} style={{ display: 'none' }} />
+          
           {isEditingName ? (
             <div className="edit-name-box">
               <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="اسم شما..." maxLength={15} />
