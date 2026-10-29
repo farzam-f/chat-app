@@ -14,10 +14,10 @@ function App() {
   const [userAvatar, setUserAvatar] = useState('');
   
   // استیت‌های ثبت‌نام و لاگین
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(false); // false = ثبت‌نام, true = لاگین
   const [authName, setAuthName] = useState('');
   const [authPass, setAuthPass] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
 
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isBlockedByMe, setIsBlockedByMe] = useState(false);
@@ -28,7 +28,7 @@ function App() {
   const [chatList, setChatList] = useState([]);
   const [groupList, setGroupList] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchTab, setSearchTab] = useState('user'); // 'user' | 'group'
+  const [searchTab, setSearchTab] = useState('user');
   const [targetCode, setTargetCode] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   
@@ -65,19 +65,23 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. بررسی کاربر
+  // ۱. بررسی وضعیت لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        const { data, error } = await supabase.auth.signInAnonymously();
-        if (!error) setUser(data.user);
-      } else {
+      if (session) {
         setUser(session.user);
       }
       setLoading(false);
     };
     checkUser();
+
+    // گوش دادن به تغییرات لاگین
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => authListener.subscription.unsubscribe();
   }, []);
 
   // ۲. آنلاین بودن
@@ -104,20 +108,10 @@ function App() {
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
-        let localCode = localStorage.getItem('myChatCode');
         const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (error) return console.error(error);
 
-        if (!data) {
-          if (!localCode) { localCode = await generateUniqueCode(); localStorage.setItem('myChatCode', localCode); }
-          const { error: insertError } = await supabase.from('profiles').insert({ id: user.id, code: localCode });
-          if (insertError) {
-            const newCode = await generateUniqueCode();
-            localStorage.setItem('myChatCode', newCode);
-            await supabase.from('profiles').insert({ id: user.id, code: newCode });
-            setUserCode(newCode);
-          } else { setUserCode(localCode); }
-        } else {
+        if (data) {
           setUserCode(data.code); setUserName(data.username || ''); setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
         }
@@ -126,6 +120,54 @@ function App() {
     setupUserProfile();
   }, [user]);
 
+  // ۴. توابع لاگین و ثبت‌نام
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
+    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
+
+    setAuthLoading(true);
+    const email = `${authName.toLowerCase()}@flw.local`; // تبدیل اسم کاربری به ایمیل فیک
+
+    if (isLogin) {
+      // ورود
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
+      if (error) {
+        alert('نام کاربری یا رمز عبور اشتباه است!');
+      } else {
+        setUser(data.user);
+      }
+    } else {
+      // ثبت‌نام
+      const { data, error } = await supabase.auth.signUp({ email, password: authPass });
+      if (error) {
+        alert(error.message);
+      } else if (data.user) {
+        // ساخت پروفایل برای کاربر جدید
+        const newCode = await generateUniqueCode();
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          code: newCode,
+          username: authName,
+          username_login: authName,
+          password_login: authPass
+        });
+        setUser(data.user);
+      }
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
+      await supabase.auth.signOut();
+      setUser(null);
+      setUserCode(''); setUserName(''); setUserAvatar('');
+      localStorage.removeItem('myChatCode');
+    }
+  };
+
+  // ... (بقیه توابع مثل fetchChatList, handleSearch, openChat, handleSendMessage بدون تغییر)
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase
@@ -164,38 +206,6 @@ function App() {
   };
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
-
-  // ثبت‌نام / لاگین
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
-    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
-
-    if (isRegistering) {
-      const { data: existing } = await supabase.from('profiles').select('id').eq('username_login', authName).maybeSingle();
-      if (existing) return alert('این نام کاربری قبلاً گرفته شده است!');
-      await supabase.from('profiles').update({ username: authName, username_login: authName, password_login: authPass }).eq('id', user.id);
-      setUserName(authName);
-      setIsLogin(true);
-    } else {
-      const { data: userData, error } = await supabase.from('profiles').select('id').eq('username_login', authName).eq('password_login', authPass).maybeSingle();
-      if (error || !userData) return alert('نام کاربری یا رمز عبور اشتباه است!');
-      await supabase.auth.signOut();
-      await supabase.auth.signInAnonymously();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) setUser(session.user);
-      setUserName(authName);
-      setIsLogin(true);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
-      await supabase.auth.signOut();
-      localStorage.removeItem('myChatCode');
-      window.location.reload();
-    }
-  };
 
   const saveName = async () => {
     if (!userName.trim()) return;
@@ -267,7 +277,6 @@ function App() {
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
 
-  // ... (بقیه توابع مثل دریافت پیام، ارسال پیام، حذف و... بدون تغییر)
   useEffect(() => {
     if (!chatId) return;
     const fetchMessages = async () => {
@@ -428,30 +437,29 @@ function App() {
   const formatTime = (timestamp) => { if (!timestamp) return ''; return new Date(timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }); };
 
   if (loading) return <div className="loading-screen">در حال اتصال...</div>;
-  if (!user) return <div className="loading-screen">در حال ساخت حساب...</div>;
 
   // صفحه لاگین / ثبت‌نام
-  if (!isLogin) {
+  if (!user) {
     return (
       <div className="auth-container">
         <div className="auth-box">
           <img src={logoImg} alt="Logo" className="auth-logo" />
-          <h2>{isRegistering ? 'ثبت‌نام در F.L.W' : 'ورود به F.L.W'}</h2>
+          <h2>{isLogin ? 'ورود به F.L.W' : 'ثبت‌نام در F.L.W'}</h2>
           <p>برای استفاده از پیام‌رسان، وارد شوید یا ثبت‌نام کنید.</p>
           <form onSubmit={handleAuth}>
-            <input type="text" placeholder="نام کاربری..." value={authName} onChange={(e) => setAuthName(e.target.value)} />
+            <input type="text" placeholder="نام کاربری (انگلیسی)..." value={authName} onChange={(e) => setAuthName(e.target.value)} />
             <input type="password" placeholder="رمز عبور..." value={authPass} onChange={(e) => setAuthPass(e.target.value)} />
-            <button type="submit">{isRegistering ? 'ثبت‌نام' : 'ورود'}</button>
+            <button type="submit" disabled={authLoading}>{authLoading ? 'صبر کنید...' : (isLogin ? 'ورود' : 'ثبت‌نام')}</button>
           </form>
-          <p className="switch-auth" onClick={() => setIsRegistering(!isRegistering)}>
-            {isRegistering ? 'قبلاً ثبت‌نام کردید؟ ورود' : 'حساب ندارید؟ ثبت‌نام'}
+          <p className="switch-auth" onClick={() => setIsLogin(!isLogin)}>
+            {isLogin ? 'حساب ندارید؟ ثبت‌نام کنید' : 'قبلاً ثبت‌نام کردید؟ وارد شوید'}
           </p>
         </div>
       </div>
     );
   }
 
-  // ... ادامه رابط کاربری (بدون تغییر، فقط دکمه خروج اضافه شده)
+  // رابط کاربری اصلی
   const isOtherOnline = chatUser ? onlineUsers.includes(chatUser.uid) : false;
 
   return (
