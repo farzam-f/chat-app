@@ -19,14 +19,16 @@ export default defineConfig({
         start_url: '/chat-app/',
         icons: [
           {
-            src: '/chat-app/pwa-192x192.png', // مسیر مطلق برای گیت‌هاب
+            src: '/chat-app/pwa-192x192.png', // مسیر کامل
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: '/chat-app/pwa-512x512.png',
+            src: '/chat-app/pwa-512x512.png', // مسیر کامل
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }

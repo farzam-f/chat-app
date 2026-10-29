@@ -493,9 +493,9 @@ function App() {
       {!chatUser ? (
         <div className="main-list-area">
           <div className="list-header">
-            {/* لوگوی تصویری با مسیر اصلاح‌شده */}
+            {/* لوگوی تصویری با مسیر مستقیم */}
             <div className="brand-logo-img">
-              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="F.L.W Logo" />
+              <img src="/chat-app/logo.png" alt="F.L.W Logo" />
             </div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
               {isSearching ? 'بستن' : 'چت جدید +'}
