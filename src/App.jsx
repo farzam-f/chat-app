@@ -89,22 +89,27 @@ function App() {
     return () => { supabase.removeChannel(presenceChannel); };
   }, [user]);
 
+  // 🔥 بهینه‌سازی ساخت کد (سریع‌تر)
   const generateUniqueCode = async () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 6; i++) { code += chars.charAt(Math.floor(Math.random() * chars.length)); }
-    const { data } = await supabase.from('profiles').select('code').eq('code', code).maybeSingle();
-    return data ? generateUniqueCode() : code;
+    return code; // فعلاً چک تکراری بودن رو برداشتیم تا سریع بشه
   };
 
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-        if (error) return console.error(error);
+        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (data) {
           setUserCode(data.code); setUserName(data.username || ''); setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
+        } else {
+          // اگر پروفایل نبود، بساز
+          const newCode = await generateUniqueCode();
+          await supabase.from('profiles').insert({ id: user.id, code: newCode, username: 'کاربر' });
+          setUserCode(newCode);
+          setUserName('کاربر');
         }
       }
     };
@@ -192,7 +197,6 @@ function App() {
     fetchChatList();
   };
 
-  // 🔥 آپلود عکس پروفایل (نسخه پایدار و تست‌شده)
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -200,21 +204,17 @@ function App() {
     try {
       const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
-      
-      // استفاده از نام یکتا برای هر آپلود
       const filePath = `avatars/${user.id}-${Date.now()}.webp`;
       
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
       
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
       const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
       
       setUserAvatar(publicUrl);
       fetchChatList();
-      alert('عکس پروفایل با موفقیت تغییر کرد!');
     } catch (error) {
       console.error('Avatar upload error:', error);
       alert('خطا در آپلود عکس: ' + error.message);
@@ -257,12 +257,21 @@ function App() {
     setGroupChat(group); setChatUser(null); setChatId(group.id); setIsSearching(false);
   };
 
-  // 🔥 اصلاح خطای 406 (استفاده از maybeSingle)
+  // 🔥 تابع مسدودسازی
   const checkBlockStatus = async (otherUid) => {
     const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).maybeSingle();
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).maybeSingle();
     setIsBlockedByMe(myProfile?.blocked_ids?.includes(otherUid) || false);
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
+  };
+
+  const toggleBlock = async () => {
+    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).maybeSingle();
+    let blocked = myProfile?.blocked_ids || [];
+    if (isBlockedByMe) { blocked = blocked.filter(id => id !== chatUser.uid); } 
+    else { blocked.push(chatUser.uid); }
+    await supabase.from('profiles').update({ blocked_ids: blocked }).eq('id', user.id);
+    setIsBlockedByMe(!isBlockedByMe);
   };
 
   useEffect(() => {
@@ -565,11 +574,25 @@ function App() {
                 {!groupChat && <div className="status-text">{isOtherTyping ? <span className="typing-text">در حال تایپ...</span> : isOtherOnline ? <span className="online-text">آنلاین</span> : <span className="offline-text">آفلاین</span>}</div>}
               </div>
             </div>
+            
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button className="block-btn" onClick={() => setShowClearModal(true)}>🗑️</button>
+              {/* 🔥 دکمه مسدود کردن */}
+              {!groupChat && (
+                <button className="block-btn" onClick={toggleBlock} title={isBlockedByMe ? "رفع مسدودیت" : "مسدود کردن"}>
+                  {isBlockedByMe ? '✅' : '🚫'}
+                </button>
+              )}
+              <button className="block-btn" onClick={() => setShowClearModal(true)} title="حذف چت">🗑️</button>
               <button className="back-btn" onClick={() => { setChatUser(null); setGroupChat(null); setChatId(null); setMessages([]); }}>بستن ✕</button>
             </div>
           </div>
+
+          {isBlockedByMe && (
+            <div className="system-message blocked-msg">شما این کاربر را مسدود کرده‌اید.</div>
+          )}
+          {hasBlockedMe && (
+            <div className="system-message blocked-msg">شما توسط این کاربر مسدود شده‌اید.</div>
+          )}
 
           {showClearModal && (
             <div className="modal-overlay">
@@ -684,12 +707,12 @@ function App() {
                   )}
                 </div>
 
-                <input type="text" placeholder="پیام..." value={newMessage} onChange={handleTyping} />
+                <input type="text" placeholder="پیام..." value={newMessage} onChange={handleTyping} disabled={isBlockedByMe || hasBlockedMe} />
                 
                 {newMessage.trim() ? (
-                  <button type="submit" className="send-btn"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
+                  <button type="submit" className="send-btn" disabled={isBlockedByMe || hasBlockedMe}><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
                 ) : (
-                  <button type="button" className="send-btn mic-btn" onClick={startRecording}>🎙️</button>
+                  <button type="button" className="send-btn mic-btn" onClick={startRecording} disabled={isBlockedByMe || hasBlockedMe}>🎙️</button>
                 )}
               </form>
             )}

@@ -5,8 +5,6 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-color: var(--bg-main); color: var(--text-main); height: 100%; width: 100%; overflow: hidden; transition: background-color 0.3s, color 0.3s; }
-
-/* استایل اصلی اپ */
 .app-container { display: flex; flex-direction: column; height: 100vh; height: 100dvh; width: 100%; max-width: 800px; margin: 0 auto; background-color: var(--bg-panel); box-shadow: 0 0 20px rgba(0,0,0,0.2); position: relative; overflow: hidden; }
 
 /* Auth */
@@ -75,6 +73,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .back-btn { background: none; border: none; color: var(--accent-color); cursor: pointer; font-size: 0.95rem; font-family: inherit; }
 .block-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; opacity: 0.7; transition: 0.2s; }
 .block-btn:hover { opacity: 1; transform: scale(1.1); }
+.system-message { text-align: center; font-size: 0.85rem; padding: 10px; background-color: rgba(255, 77, 77, 0.1); color: #ff4d4d; border-bottom: 1px solid var(--border-color); }
 
 /* Messages */
 .messages-area { flex: 1; min-height: 0; padding: 20px; overflow-y: auto; background-color: var(--bg-main); background-image: url('https://web.telegram.org/a/chat-bg-pattern-dark.png'); background-size: cover; display: flex; flex-direction: column; gap: 12px; }
@@ -109,7 +108,7 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .action-btn { font-size: 0.8rem; cursor: pointer; opacity: 0.5; transition: 0.2s; }
 .action-btn:hover { opacity: 1; transform: scale(1.2); }
 
-/* Input Area - CRITICAL FIX */
+/* Input Area */
 .input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); width: 100%; border-top: 1px solid var(--border-color); }
 .input-form { display: flex; width: 100%; align-items: center; gap: 10px; }
 .input-area input[type="text"] { flex: 1; background-color: var(--bg-input); border: none; padding: 14px 20px; border-radius: 25px; color: var(--text-main); font-family: inherit; font-size: 1rem; outline: none; min-width: 0; }
