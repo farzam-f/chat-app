@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import imageCompression from 'browser-image-compression';
+import logoImg from './logo.png'; // 🔥 ایمپورت مستقیم لوگو از پوشه src
 import './App.css';
 
 const EMOJIS = ['😊', '😂', '❤️', '👍', '🔥', '😍', '🙏', '👏', '😢', '😡', '🎉', '👀', '💯', '🤔', '😎', '🤝'];
@@ -493,9 +494,9 @@ function App() {
       {!chatUser ? (
         <div className="main-list-area">
           <div className="list-header">
-            {/* لوگوی تصویری با مسیر مستقیم */}
+            {/* استفاده از متغیر ایمپورت شده برای لوگو */}
             <div className="brand-logo-img">
-              <img src="/chat-app/logo.png" alt="F.L.W Logo" />
+              <img src={logoImg} alt="F.L.W Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <button className="new-chat-btn" onClick={() => setIsSearching(!isSearching)}>
               {isSearching ? 'بستن' : 'چت جدید +'}
