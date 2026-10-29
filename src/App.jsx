@@ -192,7 +192,7 @@ function App() {
     fetchChatList();
   };
 
-  // 🔥 تابع اصلاح شده آپلود عکس پروفایل (بدون upsert)
+  // 🔥 آپلود عکس پروفایل (نسخه پایدار و تست‌شده)
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -201,21 +201,23 @@ function App() {
       const options = { maxSizeMB: 0.1, maxWidthOrHeight: 256, useWebWorker: true, fileType: 'image/webp' };
       const compressedFile = await imageCompression(file, options);
       
-      // استفاده از نام یکتا برای جلوگیری از تداخل و خطای 400
+      // استفاده از نام یکتا برای هر آپلود
       const filePath = `avatars/${user.id}-${Date.now()}.webp`;
       
       const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, compressedFile);
       if (uploadError) throw uploadError;
       
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+      
       const { error: updateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
       if (updateError) throw updateError;
       
       setUserAvatar(publicUrl);
       fetchChatList();
+      alert('عکس پروفایل با موفقیت تغییر کرد!');
     } catch (error) {
       console.error('Avatar upload error:', error);
-      alert('خطا در آپلود عکس! (کنسول را چک کنید)');
+      alert('خطا در آپلود عکس: ' + error.message);
     } finally { setUploading(false); }
   };
 
@@ -255,9 +257,10 @@ function App() {
     setGroupChat(group); setChatUser(null); setChatId(group.id); setIsSearching(false);
   };
 
+  // 🔥 اصلاح خطای 406 (استفاده از maybeSingle)
   const checkBlockStatus = async (otherUid) => {
-    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
-    const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).single();
+    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).maybeSingle();
+    const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).maybeSingle();
     setIsBlockedByMe(myProfile?.blocked_ids?.includes(otherUid) || false);
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
   };
