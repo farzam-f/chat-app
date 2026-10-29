@@ -13,7 +13,6 @@ function App() {
   const [userName, setUserName] = useState('');
   const [userAvatar, setUserAvatar] = useState('');
   
-  // استیت‌های ثبت‌نام و لاگین
   const [isLogin, setIsLogin] = useState(false);
   const [authName, setAuthName] = useState('');
   const [authPass, setAuthPass] = useState('');
@@ -65,7 +64,6 @@ function App() {
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
   useEffect(() => { scrollToBottom(); }, [messages]);
 
-  // ۱. بررسی وضعیت لاگین
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -73,14 +71,10 @@ function App() {
       setLoading(false);
     };
     checkUser();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => { setUser(session?.user || null); });
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // ۲. آنلاین بودن
   useEffect(() => {
     if (!user) return;
     const presenceChannel = supabase.channel('online-users', { config: { presence: { key: user.id } } });
@@ -100,13 +94,11 @@ function App() {
     return data ? generateUniqueCode() : code;
   };
 
-  // ۳. تنظیم پروفایل (دریافت کد و اطلاعات)
   useEffect(() => {
     const setupUserProfile = async () => {
       if (user) {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         if (error) return console.error(error);
-
         if (data) {
           setUserCode(data.code); setUserName(data.username || ''); setUserAvatar(data.avatar_url || '');
           localStorage.setItem('myChatCode', data.code);
@@ -116,51 +108,6 @@ function App() {
     setupUserProfile();
   }, [user]);
 
-  // ۴. توابع لاگین و ثبت‌نام (به همراه تولید کد اختصاصی)
-  const handleAuth = async (e) => {
-    e.preventDefault();
-    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
-    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
-
-    setAuthLoading(true);
-    const email = `${authName.toLowerCase()}@flw.local`;
-
-    if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
-      if (error) alert('نام کاربری یا رمز عبور اشتباه است!');
-      else setUser(data.user);
-    } else {
-      const { data, error } = await supabase.auth.signUp({ email, password: authPass });
-      if (error) {
-        alert(error.message);
-      } else if (data.user) {
-        // 🔥 تولید کد اختصاصی برای اکانت جدید
-        const newCode = await generateUniqueCode();
-        
-        await supabase.from('profiles').insert({
-          id: data.user.id,
-          code: newCode,
-          username: authName,
-          username_login: authName,
-          password_login: authPass
-        });
-        
-        setUser(data.user);
-      }
-    }
-    setAuthLoading(false);
-  };
-
-  const handleLogout = async () => {
-    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
-      await supabase.auth.signOut();
-      setUser(null);
-      setUserCode(''); setUserName(''); setUserAvatar('');
-      localStorage.removeItem('myChatCode');
-    }
-  };
-
-  // ... (بقیه توابع مثل fetchChatList, handleSearch, openChat, handleSendMessage بدون تغییر)
   const fetchChatList = async () => {
     if (!user) return;
     const { data: msgs, error } = await supabase
@@ -200,11 +147,45 @@ function App() {
 
   useEffect(() => { if (user && !chatId) fetchChatList(); }, [user, chatId]);
 
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!authName.trim() || !authPass.trim()) return alert('نام کاربری و رمز را وارد کنید');
+    if (authPass.length < 4) return alert('رمز باید حداقل ۴ کاراکتر باشد');
+
+    setAuthLoading(true);
+    const email = `${authName.toLowerCase()}@flw.local`;
+
+    if (isLogin) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: authPass });
+      if (error) alert('نام کاربری یا رمز عبور اشتباه است!');
+      else setUser(data.user);
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password: authPass });
+      if (error) {
+        alert(error.message);
+      } else if (data.user) {
+        const newCode = await generateUniqueCode();
+        await supabase.from('profiles').insert({
+          id: data.user.id, code: newCode, username: authName, username_login: authName, password_login: authPass
+        });
+        setUser(data.user);
+      }
+    }
+    setAuthLoading(false);
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm('آیا از حساب خود خارج می‌شوید؟')) {
+      await supabase.auth.signOut();
+      setUser(null); setUserCode(''); setUserName(''); setUserAvatar('');
+      localStorage.removeItem('myChatCode');
+    }
+  };
+
   const saveName = async () => {
     if (!userName.trim()) return;
     await supabase.from('profiles').update({ username: userName }).eq('id', user.id);
-    setIsEditingName(false);
-    fetchChatList();
+    setIsEditingName(false); fetchChatList();
   };
 
   const handleAvatarUpload = async (e) => {
@@ -219,8 +200,7 @@ function App() {
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
-      setUserAvatar(publicUrl);
-      fetchChatList();
+      setUserAvatar(publicUrl); fetchChatList();
     } catch (error) { alert('خطا در آپلود عکس!'); } finally { setUploading(false); }
   };
 
@@ -240,16 +220,14 @@ function App() {
     if (!error && data) {
       await supabase.from('group_members').insert({ group_id: data.id, user_id: user.id });
       setGroupList(prev => [...prev, data]);
-      setNewGroupName('');
-      setSearchTab('user');
+      setNewGroupName(''); setSearchTab('user');
     }
   };
 
   const openChat = async (otherUid, otherCode, otherName, otherAvatar) => {
     const newChatId = [user.id, otherUid].sort().join('_');
     setChatUser({ uid: otherUid, code: otherCode, name: otherName, avatarUrl: otherAvatar });
-    setGroupChat(null);
-    setChatId(newChatId);
+    setGroupChat(null); setChatId(newChatId);
     setIsSearching(false); setTargetCode(''); setIsOtherTyping(false); setReplyingTo(null); setEditingMessage(null);
     await supabase.from('messages').update({ is_read: true }).eq('chat_id', newChatId).neq('sender_id', user.id).eq('is_read', false);
     setChatList(prev => prev.map(c => c.chatId === newChatId ? { ...c, unreadCount: 0 } : c));
@@ -257,10 +235,7 @@ function App() {
   };
 
   const openGroup = async (group) => {
-    setGroupChat(group);
-    setChatUser(null);
-    setChatId(group.id);
-    setIsSearching(false);
+    setGroupChat(group); setChatUser(null); setChatId(group.id); setIsSearching(false);
   };
 
   const checkBlockStatus = async (otherUid) => {
@@ -268,6 +243,15 @@ function App() {
     const { data: otherProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', otherUid).single();
     setIsBlockedByMe(myProfile?.blocked_ids?.includes(otherUid) || false);
     setHasBlockedMe(otherProfile?.blocked_ids?.includes(user.id) || false);
+  };
+
+  const toggleBlock = async () => {
+    const { data: myProfile } = await supabase.from('profiles').select('blocked_ids').eq('id', user.id).single();
+    let blocked = myProfile?.blocked_ids || [];
+    if (isBlockedByMe) { blocked = blocked.filter(id => id !== chatUser.uid); } 
+    else { blocked.push(chatUser.uid); }
+    await supabase.from('profiles').update({ blocked_ids: blocked }).eq('id', user.id);
+    setIsBlockedByMe(!isBlockedByMe);
   };
 
   useEffect(() => {
@@ -431,7 +415,6 @@ function App() {
 
   if (loading) return <div className="loading-screen">در حال اتصال...</div>;
 
-  // صفحه لاگین / ثبت‌نام
   if (!user) {
     return (
       <div className="auth-container">
@@ -452,7 +435,6 @@ function App() {
     );
   }
 
-  // رابط کاربری اصلی
   const isOtherOnline = chatUser ? onlineUsers.includes(chatUser.uid) : false;
 
   return (
@@ -568,15 +550,58 @@ function App() {
           <div className="messages-area">
             {messages.map(msg => {
               const isMe = msg.sender_id === user.id;
+              const repliedMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null;
+              const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0;
+
               return (
                 <div key={msg.id} className={`message-wrapper ${isMe ? 'outgoing' : 'incoming'}`}>
                   <div className="message-bubble">
-                    {msg.audio_url ? <audio controls src={msg.audio_url} className="voice-player" /> : msg.image_url ? <img src={msg.image_url} className="chat-image" /> : msg.content}
+                    {repliedMsg && (
+                      <div className="quoted-message">
+                        <div className="quoted-name">{repliedMsg.sender_id === user.id ? 'شما' : chatUser.name}</div>
+                        <div className="quoted-text">{repliedMsg.image_url ? '📷 عکس' : (repliedMsg.audio_url ? '🎙️ پیام صوتی' : repliedMsg.content)}</div>
+                      </div>
+                    )}
+                    
+                    {msg.audio_url ? (
+                      <audio controls src={msg.audio_url} className="voice-player" />
+                    ) : msg.image_url ? (
+                      <img src={msg.image_url} alt="sent" className="chat-image" />
+                    ) : (
+                      msg.content
+                    )}
+
+                    <div className="message-meta">
+                       {msg.is_edited && <span className="edited-tag">(ویرایش شده)</span>}
+                    </div>
                   </div>
+                  
+                  {hasReactions && (
+                    <div className="reactions-container">
+                      {Object.entries(msg.reactions).map(([emoji, users]) => (
+                        <span key={emoji} className="reaction-badge" onClick={() => handleReaction(msg.id, emoji)}>
+                          {emoji} {users.length > 1 ? users.length : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="message-info">
                     <span className="message-time">{formatTime(msg.created_at)}</span>
                     <div className="message-actions">
-                      {isMe && <span className="action-btn" onClick={() => deleteMessage(msg.id)}>🗑️</span>}
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <span className="action-btn" onClick={(e) => { e.stopPropagation(); setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id); }}>❤️</span>
+                        {reactionPickerMsgId === msg.id && (
+                          <div className={`reaction-picker ${isMe ? 'picker-left' : 'picker-right'}`}>
+                            {EMOJIS.slice(0, 6).map(e => (
+                              <span key={e} onClick={() => handleReaction(msg.id, e)}>{e}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <span className="action-btn" onClick={() => setReplyingTo(msg)} title="پاسخ">↩️</span>
+                      {isMe && !msg.audio_url && <span className="action-btn" onClick={() => { setEditingMessage(msg); setNewMessage(msg.content); }} title="ویرایش">✏️</span>}
+                      {isMe && <span className="action-btn" onClick={() => deleteMessage(msg.id)} title="حذف">🗑️</span>}
                     </div>
                   </div>
                 </div>
@@ -584,6 +609,18 @@ function App() {
             })}
             <div ref={messagesEndRef} />
           </div>
+
+          {(replyingTo || editingMessage) && (
+            <div className="reply-banner" style={{ borderRightColor: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
+              <div className="reply-banner-info">
+                <span className="reply-banner-name" style={{ color: editingMessage ? '#ffc107' : 'var(--accent-color)' }}>
+                  {editingMessage ? 'در حال ویرایش پیام' : (replyingTo.sender_id === user.id ? 'پاسخ به خودتان' : `پاسخ به ${chatUser?.name}`)}
+                </span>
+                <span className="reply-banner-text">{editingMessage ? editingMessage.content : (replyingTo.image_url ? '📷 عکس' : (replyingTo.audio_url ? '🎙️ پیام صوتی' : replyingTo.content))}</span>
+              </div>
+              <button className="cancel-reply-btn" onClick={() => { setReplyingTo(null); setEditingMessage(null); setNewMessage(''); }}>✕</button>
+            </div>
+          )}
 
           <div className="input-area">
             {isRecording ? (

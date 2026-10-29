@@ -93,6 +93,10 @@ html, body, #root { font-family: 'Vazirmatn', Tahoma, sans-serif; background-col
 .message-actions { display: flex; gap: 8px; align-items: center; }
 .action-btn { font-size: 0.8rem; cursor: pointer; opacity: 0.5; transition: 0.2s; }
 .action-btn:hover { opacity: 1; transform: scale(1.2); }
+.reactions-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: -8px; margin-bottom: 4px; z-index: 5; }
+.reaction-badge { background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 12px; padding: 2px 8px; font-size: 0.8rem; cursor: pointer; color: var(--text-main); }
+.reaction-picker { position: absolute; bottom: 30px; background-color: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 20px; padding: 5px 10px; display: flex; gap: 8px; z-index: 100; }
+.picker-left { left: 0; } .picker-right { right: 0; }
 
 /* Input */
 .input-area { background-color: var(--bg-panel); padding: 10px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
